@@ -14,7 +14,9 @@ import { publicAppUrl, trustedOrigins } from "../app-url";
  */
 export const auth = betterAuth({
   appName: "Avencao",
-  secret: process.env.BETTER_AUTH_SECRET,
+  // Pendant `next build` uniquement, une valeur fictive évite des erreurs de chargement : aucune
+  // session n'est signée au build. À l'exécution, l'absence du vrai secret reste bloquante.
+  secret: process.env.BETTER_AUTH_SECRET || (process.env.NEXT_PHASE === "phase-production-build" ? "build-phase-placeholder-secret-never-used-at-runtime" : undefined),
   baseURL: publicAppUrl(),
   // Domaine public + URLs de déploiement Vercel (aperçus testables).
   trustedOrigins: trustedOrigins(),
