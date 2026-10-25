@@ -1,0 +1,53 @@
+# Déploiement mono-serveur : PostgreSQL 17 + application web + worker.
+# Démarrage : docker compose up -d db && docker compose run --rm migrate && docker compose up -d web worker
+# Les secrets viennent de .env (jamais commité). Aucune migration n'est lancée automatiquement au démarrage du web.
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: avencao
+      POSTGRES_USER: avencao
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?définir POSTGRES_PASSWORD dans .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U avencao -d avencao"]
+      interval: 10s
+      retries: 5
+
+  migrate:
+    build: { context: ., target: tools }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://avencao:${POSTGRES_PASSWORD}@db:5432/avencao
+    command: ["pnpm", "db:migrate"]
+    depends_on: { db: { condition: service_healthy } }
+    profiles: ["ops"]
+
+  web:
+    build: { context: ., target: web }
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://avencao:${POSTGRES_PASSWORD}@db:5432/avencao
+      STORAGE_LOCAL_DIR: /data/storage
+    volumes:
+      - storage:/data/storage
+    ports: ["3000:3000"]
+    depends_on: { db: { condition: service_healthy } }
+
+  worker:
+    build: { context: ., target: tools }
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://avencao:${POSTGRES_PASSWORD}@db:5432/avencao
+      STORAGE_LOCAL_DIR: /data/storage
+    volumes:
+      - storage:/data/storage
+    depends_on: { db: { condition: service_healthy } }
+
+volumes:
+  pgdata:
+  storage:

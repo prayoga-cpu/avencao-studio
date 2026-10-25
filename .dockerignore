@@ -1,0 +1,14 @@
+.git
+.next
+node_modules
+.env
+.env.*
+!.env.example
+.storage
+.storage-test
+backups
+*.dump
+test-results
+playwright-report
+tsconfig.tsbuildinfo
+src/generated

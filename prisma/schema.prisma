@@ -1,0 +1,1765 @@
+// Avencao CRM — schéma PostgreSQL (Prisma 7)
+//
+// Conventions
+// - Montants : NUMERIC(18,2) + devise explicite. Jamais de float.
+// - Taux de change : NUMERIC(20,10), exprimés en « unités de devise pour 1 EUR »
+//   (ex. 18000 IDR pour 1 EUR). Montant EUR = montant / fxUnitsPerEur.
+// - Instants : timestamptz (UTC). Échéances : DATE locale, interprétée dans le
+//   fuseau de l'agence (AgencySettings.timezone).
+// - Chaque montant a une source unique (voir docs/definitions-financieres.md).
+// - Les mouvements validés ne sont jamais supprimés : ils sont annulés (VOIDED)
+//   avec motif et auteur, et l'opération est tracée dans AuditEvent.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────────── Enums ─────────────────────────────
+
+enum Role {
+  ADMIN
+  PRODUCTION_MANAGER
+  EDITOR
+  CLIENT
+  VISITOR
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+  PENDING_REVIEW
+}
+
+enum Currency {
+  EUR
+  IDR
+  USD
+}
+
+enum FxSource {
+  IDENTITY
+  MANUAL
+  REFERENCE_TABLE
+}
+
+enum TokenPurpose {
+  INVITE
+  RESET
+}
+
+enum ClientKind {
+  COMPANY
+  INDIVIDUAL
+}
+
+enum ClientStatus {
+  PROSPECT
+  ACTIVE
+  INACTIVE
+  LOST
+  ARCHIVED
+}
+
+enum OpportunityStage {
+  NEW
+  CONTACTED
+  QUALIFIED
+  PROPOSAL_SENT
+  NEGOTIATION
+  WON
+  LOST
+}
+
+enum ActivityType {
+  NOTE
+  CALL
+  EMAIL
+  MEETING
+  MESSAGE
+  STAGE_CHANGE
+  TASK
+}
+
+enum NoteVisibility {
+  INTERNAL
+  ADMIN_ONLY
+}
+
+enum EditorStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum EditorLevel {
+  JUNIOR
+  INTERMEDIATE
+  SENIOR
+  EXPERT
+}
+
+enum Skill {
+  PREMIERE_PRO
+  AFTER_EFFECTS
+  DAVINCI_RESOLVE
+  CAPCUT
+  RUSH_PREP
+  SUBTITLING
+  MOTION_DESIGN
+  COLOR_GRADING
+  SOUND_DESIGN
+  THUMBNAIL
+}
+
+enum VideoType {
+  REEL
+  SHORT
+  YOUTUBE
+  VLOG
+  PODCAST
+  VSL
+  AD
+  INTRO
+  MOTION_DESIGN
+  OTHER
+}
+
+enum RateMode {
+  PER_VIDEO
+  HOURLY
+  PER_FINAL_MINUTE
+  DAILY
+  MONTHLY_ENVELOPE
+}
+
+enum MinuteRounding {
+  EXACT_SECOND
+  CEIL_HALF_MINUTE
+  CEIL_MINUTE
+}
+
+enum ProjectStatus {
+  DRAFT
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+  ARCHIVED
+}
+
+enum Priority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum VideoStatus {
+  TO_PREPARE
+  WAITING_RUSHES
+  TO_ASSIGN
+  ASSIGNED
+  EDITING
+  INTERNAL_REVIEW
+  INTERNAL_CHANGES
+  CLIENT_REVIEW
+  CLIENT_CHANGES
+  APPROVED
+  DELIVERED
+  ARCHIVED
+  CANCELLED
+}
+
+enum LinkKind {
+  RUSHES
+  DOCUMENT
+  REVIEW
+  FINAL_EXPORT
+  OTHER
+}
+
+enum AssignmentRole {
+  EDIT
+  RUSH_PREP
+  MOTION
+  SUBTITLES
+  COLOR
+  SOUND
+  THUMBNAIL
+  OTHER
+}
+
+enum AssignmentStatus {
+  PLANNED
+  IN_PROGRESS
+  SUBMITTED
+  APPROVED
+  CANCELLED
+}
+
+enum VersionStatus {
+  PENDING
+  CHANGES_REQUESTED
+  APPROVED_INTERNAL
+  APPROVED_CLIENT
+  SUPERSEDED
+}
+
+enum FeedbackSource {
+  INTERNAL
+  CLIENT
+}
+
+enum FeedbackStatus {
+  OPEN
+  RESOLVED
+  REJECTED
+}
+
+enum FeedbackCategory {
+  INCLUDED
+  INTERNAL_ERROR
+  OUT_OF_SCOPE
+}
+
+enum ChangeRequestStatus {
+  PROPOSED
+  ACCEPTED
+  REJECTED
+}
+
+enum DeadlineField {
+  VIDEO_INTERNAL
+  VIDEO_CLIENT
+  ASSIGNMENT_DUE
+  PROJECT_CLIENT
+}
+
+enum AllocationMethod {
+  EQUAL
+  WEIGHTED
+  MANUAL
+}
+
+enum SalesOrderStatus {
+  ACCEPTED
+  CANCELLED
+}
+
+enum InvoiceKind {
+  STANDARD
+  DEPOSIT
+  FINAL
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  CANCELLED
+}
+
+enum CreditNoteStatus {
+  DRAFT
+  ISSUED
+  CANCELLED
+}
+
+enum MovementStatus {
+  RECORDED
+  VOIDED
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  CARD
+  PAYPAL
+  WISE
+  CASH
+  OTHER
+}
+
+enum CostKind {
+  ASSIGNMENT
+  PURCHASE
+  ENVELOPE
+  ADDITIONAL
+}
+
+enum CostStage {
+  ESTIMATED
+  COMMITTED
+  VALIDATED
+  CANCELLED
+}
+
+enum Recurrence {
+  NONE
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum RetainerStatus {
+  ACTIVE
+  PAUSED
+  ENDED
+}
+
+enum CarryOverPolicy {
+  NONE
+  NEXT_PERIOD
+  UNLIMITED
+}
+
+enum AttachmentOwner {
+  CLIENT
+  PROJECT
+  VIDEO
+  INVOICE
+  CREDIT_NOTE
+  CLIENT_PAYMENT
+  SUPPLIER_PAYMENT
+  EXPENSE
+  EDITOR
+  SETTINGS
+  USER
+  LEGACY_PAYMENT
+  DIRECT_COST
+}
+
+enum NotificationType {
+  ASSIGNMENT_CREATED
+  DEADLINE_SOON
+  OVERDUE
+  NEW_FEEDBACK
+  VALIDATION_PENDING
+  MARGIN_BELOW_THRESHOLD
+  MISSING_COST
+}
+
+enum ReconciliationStatus {
+  TO_RECONCILE
+  LINKED_INVOICE
+  LINKED_PAYMENT
+  ARCHIVED
+}
+
+enum ImportMode {
+  DRY_RUN
+  APPLY
+}
+
+enum ImportRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum IssueLevel {
+  INFO
+  WARNING
+  ERROR
+}
+
+enum OverheadMethod {
+  NONE
+  HOURS
+  REVENUE
+}
+
+// ───────────────────── Authentification (Better Auth) ─────────────────────
+
+model User {
+  id            String   @id @default(cuid())
+  name          String
+  email         String   @unique
+  emailVerified Boolean  @default(false)
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  firstName     String?
+  lastName      String?
+  role          Role       @default(VISITOR)
+  status        UserStatus @default(ACTIVE)
+  /// Accès financier explicite pour un responsable de production.
+  financeAccess Boolean    @default(false)
+  /// Rôle Rails d'origine (admin, manager, collabo, rahona, designer, visitor).
+  legacyRole    String?
+  suggestedRole Role?
+  lastLoginAt   DateTime?
+
+  sessions      Session[]
+  accounts      Account[]
+  editorProfile EditorProfile?
+  accessTokens  AccessToken[]  @relation("TokenUser")
+  issuedTokens  AccessToken[]  @relation("TokenIssuer")
+  notifications Notification[]
+  notificationPreferences NotificationPreference[]
+  ownedClients  Client[]       @relation("ClientOwner")
+  ownedProjects Project[]      @relation("ProjectOwner")
+  ownedOpportunities Opportunity[] @relation("OpportunityOwner")
+  notes         Note[]
+  activities    Activity[]
+  timeEntries   TimeEntry[]
+
+  @@index([role, status])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+
+model RateLimit {
+  id          String @id @default(cuid())
+  key         String @unique
+  count       Int
+  lastRequest BigInt
+}
+
+/// Jeton d'invitation ou de réinitialisation : seul le hash SHA-256 est stocké.
+model AccessToken {
+  id          String       @id @default(cuid())
+  userId      String
+  user        User         @relation("TokenUser", fields: [userId], references: [id], onDelete: Cascade)
+  purpose     TokenPurpose
+  tokenHash   String       @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  revokedAt   DateTime?
+  createdById String?
+  createdBy   User?        @relation("TokenIssuer", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime     @default(now())
+
+  @@index([userId, purpose])
+}
+
+// ───────────────────────────── Agence ─────────────────────────────
+
+model AgencySettings {
+  id                       Int            @id @default(1)
+  name                     String         @default("Avencao")
+  logoAttachmentId         String?
+  reportingCurrency        Currency       @default(EUR)
+  timezone                 String         @default("Asia/Makassar")
+  /// Seuil d'alerte de taux de marge (en %).
+  marginThresholdPct       Decimal        @default(40) @db.Decimal(5, 2)
+  /// Valorisation interne du temps du dirigeant (analyse séparée, jamais une sortie de trésorerie).
+  ownerHourlyRate          Decimal?       @db.Decimal(18, 2)
+  ownerTimeIncludedInCosts Boolean        @default(false)
+  defaultIncludedRevisions Int            @default(2)
+  revisionRoundDefinition  String         @default("Un aller-retour = un envoi de version suivi d'une liste de retours consolidée.")
+  productionErrorPolicy    String         @default("Les corrections dues à une erreur de production ne consomment pas d'aller-retour.")
+  defaultMinuteRounding    MinuteRounding @default(CEIL_MINUTE)
+  /// Une TVA non récupérable peut être intégrée au coût (paramétrage).
+  nonRecoverableVatInCost  Boolean        @default(true)
+  overheadMethod           OverheadMethod @default(NONE)
+  defaultPaymentTermsDays  Int            @default(30)
+  videoRefPrefix           String         @default("AV")
+  deadlineSoonDays         Int            @default(3)
+  maxUploadMb              Int            @default(10)
+  updatedAt                DateTime       @updatedAt
+  version                  Int            @default(0)
+}
+
+/// Compteurs de références (AV-2026-0042, PRJ-2026-001, VTE-2026-001…).
+model ReferenceCounter {
+  key   String @id
+  value Int    @default(0)
+}
+
+model ExchangeRate {
+  id          String   @id @default(cuid())
+  date        DateTime @db.Date
+  currency    Currency
+  /// Unités de la devise pour 1 EUR.
+  unitsPerEur Decimal  @db.Decimal(20, 10)
+  source      FxSource @default(MANUAL)
+  note        String?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@unique([date, currency])
+}
+
+// ───────────────────────────── CRM ─────────────────────────────
+
+model Client {
+  id                  String       @id @default(cuid())
+  displayName         String
+  kind                ClientKind   @default(COMPANY)
+  status              ClientStatus @default(PROSPECT)
+  legalName           String?
+  email               String?
+  phone               String?
+  whatsapp            String?
+  country             String?
+  billingAddress      String?
+  vatNumber           String?
+  companyRegistration String?
+  website             String?
+  instagram           String?
+  tiktok              String?
+  youtube             String?
+  linkedin            String?
+  otherSocial         String?
+  acquisitionSource   String?
+  ownerId             String?
+  owner               User?        @relation("ClientOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  currency            Currency     @default(EUR)
+  paymentTermsDays    Int?
+  driveUrl            String?
+  creativePreferences String?
+  references          String?
+  internalNotes       String?
+  nextFollowUpOn      DateTime?    @db.Date
+  archivedAt          DateTime?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  version             Int          @default(0)
+
+  contacts       ClientContact[]
+  tags           ClientTag[]
+  opportunities  Opportunity[]
+  activities     Activity[]
+  notes          Note[]
+  projects       Project[]
+  salesOrders    SalesOrder[]
+  invoices       Invoice[]
+  creditNotes    CreditNote[]
+  payments       ClientPayment[]
+  refunds        ClientRefund[]
+  prices         ClientPrice[]
+  retainers      Retainer[]
+  legacyPayments LegacyPayment[]
+
+  @@index([status])
+  @@index([displayName])
+  @@index([nextFollowUpOn])
+}
+
+model ClientContact {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  firstName String?
+  lastName  String?
+  jobTitle  String?
+  email     String?
+  phone     String?
+  whatsapp  String?
+  isPrimary Boolean  @default(false)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
+  @@index([email])
+}
+
+model Tag {
+  id      String      @id @default(cuid())
+  name    String      @unique
+  color   String?
+  clients ClientTag[]
+}
+
+model ClientTag {
+  clientId String
+  tagId    String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  tag      Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([clientId, tagId])
+}
+
+model Opportunity {
+  id                String           @id @default(cuid())
+  clientId          String
+  client            Client           @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  title             String
+  stage             OpportunityStage @default(NEW)
+  services          VideoType[]
+  servicesNote      String?
+  estimatedAmount   Decimal?         @db.Decimal(18, 2)
+  currency          Currency         @default(EUR)
+  /// Probabilité modifiable (0–100). Le pipeline pondéré reste prévisionnel.
+  probability       Decimal?         @db.Decimal(5, 2)
+  expectedCloseOn   DateTime?        @db.Date
+  nextAction        String?
+  followUpOn        DateTime?        @db.Date
+  lostReason        String?
+  ownerId           String?
+  owner             User?            @relation("OpportunityOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  wonAt             DateTime?
+  lostAt            DateTime?
+  projectId         String?          @unique
+  project           Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  position          Int              @default(0)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  version           Int              @default(0)
+
+  activities  Activity[]
+  salesOrders SalesOrder[]
+
+  @@index([stage])
+  @@index([followUpOn])
+  @@index([clientId])
+}
+
+model Activity {
+  id            String       @id @default(cuid())
+  clientId      String?
+  client        Client?      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  opportunityId String?
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  type          ActivityType
+  subject       String?
+  body          String?
+  occurredAt    DateTime     @default(now())
+  authorId      String?
+  author        User?        @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt     DateTime     @default(now())
+
+  @@index([clientId, occurredAt])
+  @@index([opportunityId])
+}
+
+/// Notes internes : jamais exposées aux monteurs ni aux clients.
+model Note {
+  id            String         @id @default(cuid())
+  body          String
+  authorId      String?
+  author        User?          @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  clientId      String?
+  client        Client?        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  projectId     String?
+  project       Project?       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  videoId       String?
+  video         Video?         @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  editorId      String?
+  editor        EditorProfile? @relation(fields: [editorId], references: [id], onDelete: Cascade)
+  visibility    NoteVisibility @default(INTERNAL)
+  /// Ex. « rails:notes », « rails:suivis » pour l'historique importé.
+  legacySource  String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([clientId, createdAt])
+  @@index([projectId])
+  @@index([videoId])
+  @@index([editorId])
+}
+
+// ───────────────────────────── Prestataires ─────────────────────────────
+
+model EditorProfile {
+  id                  String       @id @default(cuid())
+  userId              String?      @unique
+  user                User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  displayName         String
+  email               String?
+  whatsapp            String?
+  country             String?
+  timezone            String?
+  languages           String[]
+  avatarUrl           String?
+  portfolioUrl        String?
+  skills              Skill[]
+  formats             VideoType[]
+  level               EditorLevel?
+  availabilityNote    String?
+  status              EditorStatus @default(ACTIVE)
+  payCurrency         Currency     @default(EUR)
+  paymentTerms        String?
+  internalNotes       String?
+  /// Appréciation interne privée (aucune notation automatique).
+  privateAppraisal    String?
+  weeklyCapacityHours Decimal?     @db.Decimal(6, 2)
+  archivedAt          DateTime?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  version             Int          @default(0)
+
+  rateCards        RateCard[]
+  unavailabilities EditorUnavailability[]
+  assignments      Assignment[]
+  directCosts      DirectCost[]
+  supplierPayments SupplierPayment[]
+  notes            Note[]
+  versions         VideoVersion[]
+  timeEntries      TimeEntry[]
+  changeRequests   ChangeRequest[]
+
+  @@index([status])
+}
+
+model EditorUnavailability {
+  id        String        @id @default(cuid())
+  editorId  String
+  editor    EditorProfile @relation(fields: [editorId], references: [id], onDelete: Cascade)
+  startsOn  DateTime      @db.Date
+  endsOn    DateTime      @db.Date
+  reason    String?
+  createdAt DateTime      @default(now())
+
+  @@index([editorId, startsOn])
+}
+
+/// Catalogue de tarifs négociés d'un prestataire. Copié dans la mission au moment de l'affectation.
+model RateCard {
+  id                String          @id @default(cuid())
+  editorId          String
+  editor            EditorProfile   @relation(fields: [editorId], references: [id], onDelete: Cascade)
+  label             String
+  videoType         VideoType?
+  productionRole    AssignmentRole?
+  mode              RateMode
+  unitPrice         Decimal         @db.Decimal(18, 2)
+  currency          Currency
+  unitLabel         String?
+  defaultQuantity   Decimal?        @db.Decimal(12, 3)
+  minuteRounding    MinuteRounding?
+  includedRevisions Int?
+  validFrom         DateTime        @db.Date
+  validTo           DateTime?       @db.Date
+  notes             String?
+  active            Boolean         @default(true)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  assignments Assignment[]
+
+  @@index([editorId, active])
+}
+
+// ───────────────────────────── Production ─────────────────────────────
+
+model ProjectTemplate {
+  id                       String    @id @default(cuid())
+  name                     String    @unique
+  description              String?
+  videoType                VideoType
+  defaultVideoCount        Int       @default(1)
+  defaultRatio             String?
+  defaultFormat            String?
+  defaultExpectedSec       Int?
+  defaultIncludedRevisions Int?
+  defaultEstimatedHours    Decimal?  @db.Decimal(8, 2)
+  titlePattern             String    @default("{type} {n}")
+  active                   Boolean   @default(true)
+  createdAt                DateTime  @default(now())
+
+  projects Project[]
+}
+
+model Project {
+  id                      String        @id @default(cuid())
+  reference               String        @unique
+  title                   String
+  clientId                String
+  client                  Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  ownerId                 String?
+  owner                   User?         @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  description             String?
+  startOn                 DateTime?     @db.Date
+  clientDeadline          DateTime?     @db.Date
+  status                  ProjectStatus @default(ACTIVE)
+  priority                Priority      @default(NORMAL)
+  driveUrl                String?
+  otherLinks              String?
+  includedRevisionRounds  Int?
+  revisionRoundDefinition String?
+  productionErrorPolicy   String?
+  templateId              String?
+  template                ProjectTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  archivedAt              DateTime?
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+  version                 Int           @default(0)
+
+  videos      Video[]
+  notes       Note[]
+  salesOrders SalesOrder[]
+  invoices    Invoice[]
+  directCosts DirectCost[]
+  opportunity Opportunity?
+
+  @@index([clientId])
+  @@index([status])
+  @@index([clientDeadline])
+}
+
+model Video {
+  id                     String       @id @default(cuid())
+  /// Référence stable, ex. AV-2026-0042. Ne change jamais.
+  reference              String       @unique
+  projectId              String
+  project                Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  title                  String
+  type                   VideoType
+  format                 String?
+  ratio                  String?
+  language               String?
+  rushDurationSec        Int?
+  expectedDurationSec    Int?
+  finalDurationSec       Int?
+  brief                  String?
+  objectives             String?
+  audience               String?
+  references             String?
+  subtitleStyle          String?
+  brandConstraints       String?
+  exportInstructions     String?
+  priority               Priority     @default(NORMAL)
+  plannedStartOn         DateTime?    @db.Date
+  internalDeadline       DateTime?    @db.Date
+  clientDeadline         DateTime?    @db.Date
+  status                 VideoStatus  @default(TO_PREPARE)
+  isBlocked              Boolean      @default(false)
+  blockedReason          String?
+  blockedOwnerId         String?
+  blockedAt              DateTime?
+  includedRevisionRounds Int?
+  estimatedHours         Decimal?     @db.Decimal(8, 2)
+  approvedAt             DateTime?
+  deliveredAt            DateTime?
+  cancelledAt            DateTime?
+  cancelReason           String?
+  /// Exception de livraison du responsable (sans lien final ou sans validation enregistrée).
+  deliveryOverrideReason String?
+  position               Int          @default(0)
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+  version                Int          @default(0)
+
+  links              VideoLink[]
+  statusEvents       VideoStatusEvent[]
+  deadlineChanges    DeadlineChange[]
+  assignments        Assignment[]
+  versions           VideoVersion[]
+  feedback           Feedback[]
+  checklist          VideoChecklistItem[]
+  changeRequests     ChangeRequest[]
+  notes              Note[]
+  revenueAllocations RevenueAllocation[]
+  directCosts        DirectCost[]
+  costAllocations    CostAllocation[]
+  timeEntries        TimeEntry[]
+  retainerCreditUse  RetainerCreditUse?
+
+  @@index([projectId])
+  @@index([status])
+  @@index([clientDeadline])
+  @@index([internalDeadline])
+}
+
+model VideoLink {
+  id            String   @id @default(cuid())
+  videoId       String
+  video         Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  kind          LinkKind
+  url           String
+  label         String?
+  /// Visible par le monteur affecté (rushs, review…). Par défaut oui.
+  editorVisible Boolean  @default(true)
+  createdById   String?
+  createdAt     DateTime @default(now())
+
+  @@index([videoId])
+}
+
+model VideoStatusEvent {
+  id         String       @id @default(cuid())
+  videoId    String
+  video      Video        @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  fromStatus VideoStatus?
+  toStatus   VideoStatus
+  actorId    String?
+  reason     String?
+  isOverride Boolean      @default(false)
+  createdAt  DateTime     @default(now())
+
+  @@index([videoId, createdAt])
+}
+
+model DeadlineChange {
+  id           String        @id @default(cuid())
+  field        DeadlineField
+  videoId      String?
+  video        Video?        @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  assignmentId String?
+  assignment   Assignment?   @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  projectId    String?
+  oldDate      DateTime?     @db.Date
+  newDate      DateTime?     @db.Date
+  reason       String?
+  actorId      String?
+  createdAt    DateTime      @default(now())
+
+  @@index([videoId])
+}
+
+/// Mission : contribution d'un prestataire à une vidéo, avec tarif figé.
+model Assignment {
+  id                    String           @id @default(cuid())
+  videoId               String
+  video                 Video            @relation(fields: [videoId], references: [id], onDelete: Restrict)
+  editorId              String
+  editor                EditorProfile    @relation(fields: [editorId], references: [id], onDelete: Restrict)
+  role                  AssignmentRole   @default(EDIT)
+  isPrimary             Boolean          @default(false)
+  scope                 String?
+  /// Tarif figé au moment de l'affectation (copie, jamais recalculée depuis le catalogue).
+  rateMode              RateMode?
+  unitPrice             Decimal?         @db.Decimal(18, 2)
+  currency              Currency?
+  quantity              Decimal          @default(1) @db.Decimal(12, 3)
+  minuteRounding        MinuteRounding?
+  rateCardId            String?
+  rateCard              RateCard?        @relation(fields: [rateCardId], references: [id], onDelete: SetNull)
+  includedRevisions     Int?
+  estimatedHours        Decimal?         @db.Decimal(8, 2)
+  startOn               DateTime?        @db.Date
+  dueOn                 DateTime?        @db.Date
+  status                AssignmentStatus @default(PLANNED)
+  internalValidatedById String?
+  internalValidatedAt   DateTime?
+  submittedAt           DateTime?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  version               Int              @default(0)
+
+  directCosts     DirectCost[]
+  deadlineChanges DeadlineChange[]
+  timeEntries     TimeEntry[]
+
+  @@index([videoId])
+  @@index([editorId, status])
+  @@index([dueOn])
+}
+
+model VideoVersion {
+  id               String            @id @default(cuid())
+  videoId          String
+  video            Video             @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  number           Int
+  url              String
+  description      String?
+  authorId         String?
+  editorId         String?
+  editor           EditorProfile?    @relation(fields: [editorId], references: [id], onDelete: SetNull)
+  status           VersionStatus     @default(PENDING)
+  /// Nature des retours demandés sur cette version (aller-retour inclus, erreur interne, hors périmètre).
+  changesCategory  FeedbackCategory?
+  changesSource    FeedbackSource?
+  sharedWithClient Boolean           @default(false)
+  decidedById      String?
+  decidedAt        DateTime?
+  decisionNote     String?
+  createdAt        DateTime          @default(now())
+
+  feedback Feedback[]
+
+  @@unique([videoId, number])
+}
+
+model Feedback {
+  id              String           @id @default(cuid())
+  videoId         String
+  video           Video            @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  versionId       String?
+  version         VideoVersion?    @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  authorId        String?
+  source          FeedbackSource   @default(INTERNAL)
+  visibleToEditor Boolean          @default(true)
+  timecode        String?
+  body            String
+  status          FeedbackStatus   @default(OPEN)
+  category        FeedbackCategory @default(INCLUDED)
+  resolvedAt      DateTime?
+  createdAt       DateTime         @default(now())
+
+  @@index([videoId, status])
+}
+
+model ChecklistTemplateItem {
+  id       String  @id @default(cuid())
+  label    String
+  position Int     @default(0)
+  active   Boolean @default(true)
+}
+
+model VideoChecklistItem {
+  id          String    @id @default(cuid())
+  videoId     String
+  video       Video     @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  label       String
+  position    Int       @default(0)
+  checked     Boolean   @default(false)
+  checkedById String?
+  checkedAt   DateTime?
+
+  @@index([videoId])
+}
+
+/// Demande hors périmètre : supplément client (ligne de vente) et/ou coût additionnel.
+model ChangeRequest {
+  id               String              @id @default(cuid())
+  videoId          String
+  video            Video               @relation(fields: [videoId], references: [id], onDelete: Restrict)
+  title            String
+  description      String?
+  clientPrice      Decimal?            @db.Decimal(18, 2)
+  clientCurrency   Currency?
+  editorCost       Decimal?            @db.Decimal(18, 2)
+  editorCurrency   Currency?
+  editorId         String?
+  editor           EditorProfile?      @relation(fields: [editorId], references: [id], onDelete: SetNull)
+  status           ChangeRequestStatus @default(PROPOSED)
+  acceptedAt       DateTime?
+  acceptedById     String?
+  acceptanceNote   String?
+  salesOrderLineId String?             @unique
+  salesOrderLine   SalesOrderLine?     @relation(fields: [salesOrderLineId], references: [id], onDelete: SetNull)
+  directCostId     String?             @unique
+  directCost       DirectCost?         @relation(fields: [directCostId], references: [id], onDelete: SetNull)
+  createdById      String?
+  createdAt        DateTime            @default(now())
+
+  @@index([videoId])
+}
+
+model TimeEntry {
+  id            String         @id @default(cuid())
+  userId        String?
+  user          User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  editorId      String?
+  editor        EditorProfile? @relation(fields: [editorId], references: [id], onDelete: SetNull)
+  assignmentId  String?
+  assignment    Assignment?    @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  videoId       String?
+  video         Video?         @relation(fields: [videoId], references: [id], onDelete: SetNull)
+  workedOn      DateTime       @db.Date
+  minutes       Int
+  /// Temps du dirigeant, valorisé au taux interne (analyse séparée).
+  isOwnerTime   Boolean        @default(false)
+  valuationRate Decimal?       @db.Decimal(18, 2)
+  note          String?
+  createdAt     DateTime       @default(now())
+
+  @@index([workedOn])
+  @@index([videoId])
+}
+
+// ───────────────────────────── Ventes ─────────────────────────────
+
+model ServiceCatalogItem {
+  id                String     @id @default(cuid())
+  name              String
+  description       String?
+  videoType         VideoType?
+  unit              String     @default("vidéo")
+  unitPrice         Decimal    @db.Decimal(18, 2)
+  currency          Currency   @default(EUR)
+  includedRevisions Int?
+  turnaroundDays    Int?
+  targetCost        Decimal?   @db.Decimal(18, 2)
+  active            Boolean    @default(true)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  clientPrices ClientPrice[]
+  orderLines   SalesOrderLine[]
+}
+
+model ClientPrice {
+  id            String              @id @default(cuid())
+  clientId      String
+  client        Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  catalogItemId String?
+  catalogItem   ServiceCatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  label         String
+  unitPrice     Decimal             @db.Decimal(18, 2)
+  currency      Currency
+  validFrom     DateTime?           @db.Date
+  validTo       DateTime?           @db.Date
+  notes         String?
+  createdAt     DateTime            @default(now())
+
+  @@index([clientId])
+}
+
+/// Vente / commande acceptée : source unique des « Ventes signées ».
+model SalesOrder {
+  id            String           @id @default(cuid())
+  reference     String           @unique
+  clientId      String
+  client        Client           @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  projectId     String?
+  project       Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  opportunityId String?
+  opportunity   Opportunity?     @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  title         String
+  acceptedOn    DateTime         @db.Date
+  currency      Currency
+  fxUnitsPerEur Decimal          @db.Decimal(20, 10)
+  fxRateDate    DateTime         @db.Date
+  fxSource      FxSource
+  status        SalesOrderStatus @default(ACCEPTED)
+  cancelledAt   DateTime?
+  cancelReason  String?
+  notes         String?
+  createdById   String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  version       Int              @default(0)
+
+  lines          SalesOrderLine[]
+  invoices       Invoice[]
+  retainerPeriod RetainerPeriod?
+
+  @@index([clientId])
+  @@index([acceptedOn])
+}
+
+model SalesOrderLine {
+  id                 String              @id @default(cuid())
+  salesOrderId       String
+  salesOrder         SalesOrder          @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  catalogItemId      String?
+  catalogItem        ServiceCatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  description        String
+  videoType          VideoType?
+  quantity           Decimal             @db.Decimal(12, 3)
+  unitPrice          Decimal             @db.Decimal(18, 2)
+  discountAmount     Decimal             @default(0) @db.Decimal(18, 2)
+  /// Montant HT net = quantité × prix − remise (arrondi devise). Figé.
+  netAmount          Decimal             @db.Decimal(18, 2)
+  netAmountEur       Decimal             @db.Decimal(18, 2)
+  /// Part annulée (HT, devise de la vente), à la date d'annulation.
+  cancelledAmount    Decimal             @default(0) @db.Decimal(18, 2)
+  cancelledAmountEur Decimal             @default(0) @db.Decimal(18, 2)
+  cancelledOn        DateTime?           @db.Date
+  cancelReason       String?
+  includedRevisions  Int?
+  allocationMethod   AllocationMethod    @default(EQUAL)
+  position           Int                 @default(0)
+  createdAt          DateTime            @default(now())
+
+  allocations   RevenueAllocation[]
+  invoiceLines  InvoiceLine[]
+  changeRequest ChangeRequest?
+
+  @@index([salesOrderId])
+}
+
+/// Répartition analytique interne d'une ligne de vente entre livrables.
+/// Somme des montants = montant net de la ligne (exactement).
+model RevenueAllocation {
+  id               String         @id @default(cuid())
+  salesOrderLineId String
+  salesOrderLine   SalesOrderLine @relation(fields: [salesOrderLineId], references: [id], onDelete: Cascade)
+  videoId          String
+  video            Video          @relation(fields: [videoId], references: [id], onDelete: Restrict)
+  weight           Decimal?       @db.Decimal(12, 4)
+  amount           Decimal        @db.Decimal(18, 2)
+  amountEur        Decimal        @db.Decimal(18, 2)
+  createdAt        DateTime       @default(now())
+
+  @@unique([salesOrderLineId, videoId])
+  @@index([videoId])
+}
+
+// ───────────────────────────── Facturation ─────────────────────────────
+
+model Invoice {
+  id              String        @id @default(cuid())
+  /// Numéro du document émis par l'outil de facturation habituel.
+  number          String?       @unique
+  externalRef     String?
+  clientId        String
+  client          Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  projectId       String?
+  project         Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  salesOrderId    String?
+  salesOrder      SalesOrder?   @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
+  kind            InvoiceKind   @default(STANDARD)
+  status          InvoiceStatus @default(DRAFT)
+  issueDate       DateTime?     @db.Date
+  dueDate         DateTime?     @db.Date
+  currency        Currency
+  fxUnitsPerEur   Decimal       @db.Decimal(20, 10)
+  fxRateDate      DateTime      @db.Date
+  fxSource        FxSource
+  totalNet        Decimal       @default(0) @db.Decimal(18, 2)
+  totalVat        Decimal       @default(0) @db.Decimal(18, 2)
+  totalGross      Decimal       @default(0) @db.Decimal(18, 2)
+  totalNetEur     Decimal       @default(0) @db.Decimal(18, 2)
+  notes           String?
+  pdfAttachmentId String?
+  cancelledAt     DateTime?
+  cancelReason    String?
+  createdById     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  version         Int           @default(0)
+
+  lines          InvoiceLine[]
+  deductedBy     InvoiceLine[]       @relation("DepositDeduction")
+  creditNotes    CreditNote[]
+  allocations    PaymentAllocation[]
+  retainerPeriod RetainerPeriod?
+  legacyPayments LegacyPayment[]
+
+  @@index([clientId])
+  @@index([status, issueDate])
+  @@index([dueDate])
+}
+
+model InvoiceLine {
+  id               String          @id @default(cuid())
+  invoiceId        String
+  invoice          Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  salesOrderLineId String?
+  salesOrderLine   SalesOrderLine? @relation(fields: [salesOrderLineId], references: [id], onDelete: SetNull)
+  /// Ligne de déduction d'un acompte déjà facturé (montant négatif).
+  deductsInvoiceId String?
+  deductsInvoice   Invoice?        @relation("DepositDeduction", fields: [deductsInvoiceId], references: [id], onDelete: Restrict)
+  description      String
+  quantity         Decimal         @db.Decimal(12, 3)
+  unitPrice        Decimal         @db.Decimal(18, 2)
+  vatRate          Decimal         @db.Decimal(5, 2)
+  netAmount        Decimal         @db.Decimal(18, 2)
+  vatAmount        Decimal         @db.Decimal(18, 2)
+  grossAmount      Decimal         @db.Decimal(18, 2)
+  position         Int             @default(0)
+
+  @@index([invoiceId])
+  @@index([deductsInvoiceId])
+}
+
+/// Avoir : réduit la facturation, une seule fois, à sa date d'émission.
+model CreditNote {
+  id              String           @id @default(cuid())
+  number          String?          @unique
+  invoiceId       String
+  invoice         Invoice          @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  clientId        String
+  client          Client           @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  status          CreditNoteStatus @default(ISSUED)
+  issueDate       DateTime         @db.Date
+  currency        Currency
+  fxUnitsPerEur   Decimal          @db.Decimal(20, 10)
+  fxRateDate      DateTime         @db.Date
+  fxSource        FxSource
+  vatRate         Decimal          @db.Decimal(5, 2)
+  totalNet        Decimal          @db.Decimal(18, 2)
+  totalVat        Decimal          @db.Decimal(18, 2)
+  totalGross      Decimal          @db.Decimal(18, 2)
+  totalNetEur     Decimal          @db.Decimal(18, 2)
+  reason          String?
+  pdfAttachmentId String?
+  cancelledAt     DateTime?
+  cancelReason    String?
+  createdById     String?
+  createdAt       DateTime         @default(now())
+
+  refunds ClientRefund[]
+
+  @@index([invoiceId])
+  @@index([issueDate])
+}
+
+/// Encaissement réellement reçu (saisie d'un mouvement déjà réalisé).
+model ClientPayment {
+  id            String         @id @default(cuid())
+  clientId      String
+  client        Client         @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  receivedOn    DateTime       @db.Date
+  amount        Decimal        @db.Decimal(18, 2)
+  currency      Currency
+  fxUnitsPerEur Decimal        @db.Decimal(20, 10)
+  fxRateDate    DateTime       @db.Date
+  fxSource      FxSource
+  amountEur     Decimal        @db.Decimal(18, 2)
+  /// Frais prélevés par l'intermédiaire de paiement (même devise).
+  fees          Decimal        @default(0) @db.Decimal(18, 2)
+  feesEur       Decimal        @default(0) @db.Decimal(18, 2)
+  method        PaymentMethod  @default(BANK_TRANSFER)
+  reference     String?
+  notes         String?
+  proofAttachmentId String?
+  status        MovementStatus @default(RECORDED)
+  voidedAt      DateTime?
+  voidReason    String?
+  voidedById    String?
+  createdById   String?
+  createdAt     DateTime       @default(now())
+  version       Int            @default(0)
+
+  allocations    PaymentAllocation[]
+  refunds        ClientRefund[]
+  legacyPayments LegacyPayment[]
+
+  @@index([clientId])
+  @@index([receivedOn])
+}
+
+model PaymentAllocation {
+  id            String        @id @default(cuid())
+  paymentId     String
+  payment       ClientPayment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  invoiceId     String
+  invoice       Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  amount        Decimal       @db.Decimal(18, 2)
+  reversedAt    DateTime?
+  reverseReason String?
+  reversedById  String?
+  createdById   String?
+  createdAt     DateTime      @default(now())
+
+  @@index([paymentId])
+  @@index([invoiceId])
+}
+
+/// Remboursement : mouvement de trésorerie sortant, sans seconde réduction du CA.
+model ClientRefund {
+  id            String         @id @default(cuid())
+  clientId      String
+  client        Client         @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  paymentId     String?
+  payment       ClientPayment? @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  creditNoteId  String?
+  creditNote    CreditNote?    @relation(fields: [creditNoteId], references: [id], onDelete: Restrict)
+  refundedOn    DateTime       @db.Date
+  amount        Decimal        @db.Decimal(18, 2)
+  currency      Currency
+  fxUnitsPerEur Decimal        @db.Decimal(20, 10)
+  fxRateDate    DateTime       @db.Date
+  fxSource      FxSource
+  amountEur     Decimal        @db.Decimal(18, 2)
+  method        PaymentMethod  @default(BANK_TRANSFER)
+  reference     String?
+  reason        String?
+  status        MovementStatus @default(RECORDED)
+  voidedAt      DateTime?
+  voidReason    String?
+  createdById   String?
+  createdAt     DateTime       @default(now())
+
+  @@index([refundedOn])
+}
+
+// ───────────────────────────── Coûts ─────────────────────────────
+
+/// Un coût direct unique, à travers ses étapes (estimé → engagé → validé).
+/// « Payé » est dérivé des allocations de règlements fournisseurs.
+/// amount NULL = « À renseigner » (jamais converti silencieusement en 0).
+model DirectCost {
+  id                String         @id @default(cuid())
+  kind              CostKind
+  stage             CostStage      @default(ESTIMATED)
+  label             String
+  editorId          String?
+  editor            EditorProfile? @relation(fields: [editorId], references: [id], onDelete: Restrict)
+  supplierName      String?
+  assignmentId      String?
+  assignment        Assignment?    @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  projectId         String?
+  project           Project?       @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  videoId           String?
+  video             Video?         @relation(fields: [videoId], references: [id], onDelete: Restrict)
+  amount            Decimal?       @db.Decimal(18, 2)
+  currency          Currency
+  fxUnitsPerEur     Decimal?       @db.Decimal(20, 10)
+  fxRateDate        DateTime?      @db.Date
+  fxSource          FxSource?
+  amountEur         Decimal?       @db.Decimal(18, 2)
+  /// TVA non récupérable incluse dans le coût (selon paramétrage), en devise du coût.
+  nonRecoverableVat Decimal        @default(0) @db.Decimal(18, 2)
+  incurredOn        DateTime       @db.Date
+  /// Période couverte (enveloppes mensuelles).
+  periodStart       DateTime?      @db.Date
+  periodEnd         DateTime?      @db.Date
+  committedAt       DateTime?
+  validatedAt       DateTime?
+  validatedById     String?
+  cancelledAt       DateTime?
+  cancelReason      String?
+  notes             String?
+  attachmentId      String?
+  createdById       String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  version           Int            @default(0)
+
+  allocations        CostAllocation[]
+  paymentAllocations SupplierPaymentAllocation[]
+  changeRequest      ChangeRequest?
+
+  @@index([editorId, stage])
+  @@index([videoId])
+  @@index([projectId])
+  @@index([assignmentId])
+  @@index([incurredOn])
+}
+
+/// Répartition analytique d'un coût (enveloppe, achat projet) entre livrables.
+/// La somme ne dépasse jamais le coût ; le reste « non alloué » reste visible.
+model CostAllocation {
+  id           String     @id @default(cuid())
+  directCostId String
+  directCost   DirectCost @relation(fields: [directCostId], references: [id], onDelete: Cascade)
+  videoId      String
+  video        Video      @relation(fields: [videoId], references: [id], onDelete: Restrict)
+  amount       Decimal    @db.Decimal(18, 2)
+  amountEur    Decimal    @db.Decimal(18, 2)
+  createdAt    DateTime   @default(now())
+
+  @@unique([directCostId, videoId])
+  @@index([videoId])
+}
+
+/// Règlement monteur/fournisseur déjà réalisé (aucun virement déclenché).
+model SupplierPayment {
+  id                String         @id @default(cuid())
+  editorId          String?
+  editor            EditorProfile? @relation(fields: [editorId], references: [id], onDelete: Restrict)
+  supplierName      String?
+  paidOn            DateTime       @db.Date
+  amount            Decimal        @db.Decimal(18, 2)
+  currency          Currency
+  fxUnitsPerEur     Decimal        @db.Decimal(20, 10)
+  fxRateDate        DateTime       @db.Date
+  fxSource          FxSource
+  amountEur         Decimal        @db.Decimal(18, 2)
+  fees              Decimal        @default(0) @db.Decimal(18, 2)
+  feesEur           Decimal        @default(0) @db.Decimal(18, 2)
+  method            PaymentMethod  @default(BANK_TRANSFER)
+  reference         String?
+  proofAttachmentId String?
+  notes             String?
+  status            MovementStatus @default(RECORDED)
+  voidedAt          DateTime?
+  voidReason        String?
+  voidedById        String?
+  createdById       String?
+  createdAt         DateTime       @default(now())
+
+  allocations SupplierPaymentAllocation[]
+
+  @@index([editorId])
+  @@index([paidOn])
+}
+
+model SupplierPaymentAllocation {
+  id                 String          @id @default(cuid())
+  paymentId          String
+  payment            SupplierPayment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  directCostId       String
+  directCost         DirectCost      @relation(fields: [directCostId], references: [id], onDelete: Restrict)
+  /// Montant dans la devise du coût (= devise du règlement).
+  amount             Decimal         @db.Decimal(18, 2)
+  amountEurAtCost    Decimal         @db.Decimal(18, 2)
+  amountEurAtPayment Decimal         @db.Decimal(18, 2)
+  /// Écart de change (positif = perte), distinct du coût.
+  fxDifferenceEur    Decimal         @db.Decimal(18, 2)
+  reversedAt         DateTime?
+  reverseReason      String?
+  createdAt          DateTime        @default(now())
+
+  @@index([paymentId])
+  @@index([directCostId])
+}
+
+model ExpenseCategory {
+  id       String    @id @default(cuid())
+  name     String    @unique
+  active   Boolean   @default(true)
+  expenses Expense[]
+}
+
+/// Charge de structure. Une dépense de production va dans DirectCost, jamais ici.
+model Expense {
+  id             String          @id @default(cuid())
+  categoryId     String
+  category       ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  label          String
+  supplier       String?
+  expenseDate    DateTime        @db.Date
+  /// Premier jour du mois de rattachement.
+  periodMonth    DateTime        @db.Date
+  amountNet      Decimal         @db.Decimal(18, 2)
+  vatAmount      Decimal         @default(0) @db.Decimal(18, 2)
+  vatRecoverable Boolean         @default(true)
+  currency       Currency
+  fxUnitsPerEur  Decimal         @db.Decimal(20, 10)
+  fxRateDate     DateTime        @db.Date
+  fxSource       FxSource
+  /// Coût de gestion en EUR : HT + TVA non récupérable si paramétré.
+  costEur        Decimal         @db.Decimal(18, 2)
+  grossEur       Decimal         @db.Decimal(18, 2)
+  recurrence     Recurrence      @default(NONE)
+  isPaid         Boolean         @default(false)
+  paidOn         DateTime?       @db.Date
+  attachmentId   String?
+  notes          String?
+  status         MovementStatus  @default(RECORDED)
+  voidedAt       DateTime?
+  voidReason     String?
+  createdById    String?
+  createdAt      DateTime        @default(now())
+
+  @@index([periodMonth])
+  @@index([paidOn])
+}
+
+// ───────────────────────────── Récurrence ─────────────────────────────
+
+model Retainer {
+  id                 String          @id @default(cuid())
+  clientId           String
+  client             Client          @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  title              String
+  startsOn           DateTime        @db.Date
+  endsOn             DateTime?       @db.Date
+  amount             Decimal         @db.Decimal(18, 2)
+  currency           Currency        @default(EUR)
+  carryOver          CarryOverPolicy @default(NONE)
+  status             RetainerStatus  @default(ACTIVE)
+  createDraftInvoice Boolean         @default(true)
+  vatRate            Decimal?        @db.Decimal(5, 2)
+  notes              String?
+  createdAt          DateTime        @default(now())
+
+  quotas  RetainerQuota[]
+  periods RetainerPeriod[]
+}
+
+model RetainerQuota {
+  id         String    @id @default(cuid())
+  retainerId String
+  retainer   Retainer  @relation(fields: [retainerId], references: [id], onDelete: Cascade)
+  videoType  VideoType
+  quantity   Int
+
+  @@unique([retainerId, videoType])
+}
+
+/// Une seule période par contrat et par mois (génération idempotente).
+model RetainerPeriod {
+  id           String      @id @default(cuid())
+  retainerId   String
+  retainer     Retainer    @relation(fields: [retainerId], references: [id], onDelete: Restrict)
+  periodStart  DateTime    @db.Date
+  periodEnd    DateTime    @db.Date
+  salesOrderId String?     @unique
+  salesOrder   SalesOrder? @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
+  invoiceId    String?     @unique
+  invoice      Invoice?    @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  /// Crédits disponibles par type (quota + report), ex. {"REEL": 10}.
+  credits      Json
+  generatedAt  DateTime    @default(now())
+
+  uses RetainerCreditUse[]
+
+  @@unique([retainerId, periodStart])
+}
+
+model RetainerCreditUse {
+  id        String         @id @default(cuid())
+  periodId  String
+  period    RetainerPeriod @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  videoId   String         @unique
+  video     Video          @relation(fields: [videoId], references: [id], onDelete: Restrict)
+  videoType VideoType
+  createdAt DateTime       @default(now())
+}
+
+// ───────────────────────────── Système ─────────────────────────────
+
+model Attachment {
+  id           String          @id @default(cuid())
+  storageKey   String          @unique
+  filename     String
+  contentType  String
+  byteSize     Int
+  sha256       String
+  ownerType    AttachmentOwner
+  ownerId      String
+  uploadedById String?
+  legacySource String?
+  createdAt    DateTime        @default(now())
+
+  @@index([ownerType, ownerId])
+}
+
+model Notification {
+  id         String           @id @default(cuid())
+  userId     String
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       NotificationType
+  title      String
+  body       String?
+  link       String?
+  entityType String?
+  entityId   String?
+  /// Clé de déduplication : une seule notification par événement logique.
+  dedupeKey  String           @unique
+  readAt     DateTime?
+  createdAt  DateTime         @default(now())
+
+  @@index([userId, readAt])
+}
+
+model NotificationPreference {
+  userId  String
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type    NotificationType
+  enabled Boolean          @default(true)
+
+  @@id([userId, type])
+}
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String
+  before     Json?
+  after      Json?
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+/// Journal des exécutions de jobs (rappels, récurrence…).
+model JobLog {
+  id         String    @id @default(cuid())
+  name       String
+  key        String?
+  status     String
+  details    Json?
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  @@index([name, startedAt])
+}
+
+// ───────────────────────────── Migration Rails ─────────────────────────────
+
+/// Correspondance ancien ID → nouvel enregistrement. Jamais d'hypothèse d'égalité d'IDs.
+model LegacyIdMap {
+  id          String   @id @default(cuid())
+  source      String
+  legacyTable String
+  legacyId    String
+  entityType  String
+  entityId    String
+  importRunId String?
+  createdAt   DateTime @default(now())
+
+  @@unique([source, legacyTable, legacyId])
+  @@index([entityType, entityId])
+}
+
+/// Historique des « paiements » Rails : exclus des totaux tant qu'ils ne sont pas rapprochés.
+model LegacyPayment {
+  id                   String               @id @default(cuid())
+  source               String
+  clientId             String
+  client               Client               @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  legacyStatus         String
+  /// Champ « devis » d'origine (entier, sans devise ni HT/TTC). Ne prouve ni facture ni encaissement.
+  quoteAmountRaw       Int?
+  nextPaymentOn        DateTime?            @db.Date
+  comment              String?
+  reconciliationStatus ReconciliationStatus @default(TO_RECONCILE)
+  linkedInvoiceId      String?
+  linkedInvoice        Invoice?             @relation(fields: [linkedInvoiceId], references: [id], onDelete: SetNull)
+  linkedPaymentId      String?
+  linkedPayment        ClientPayment?       @relation(fields: [linkedPaymentId], references: [id], onDelete: SetNull)
+  qualifiedById        String?
+  qualifiedAt          DateTime?
+  qualificationNote    String?
+  originalData         Json
+  legacyCreatedAt      DateTime?
+  createdAt            DateTime             @default(now())
+
+  @@index([reconciliationStatus])
+}
+
+model ImportRun {
+  id         String          @id @default(cuid())
+  source     String
+  mode       ImportMode
+  status     ImportRunStatus @default(RUNNING)
+  summary    Json?
+  startedAt  DateTime        @default(now())
+  finishedAt DateTime?
+
+  issues ImportIssue[]
+}
+
+model ImportIssue {
+  id       String     @id @default(cuid())
+  runId    String
+  run      ImportRun  @relation(fields: [runId], references: [id], onDelete: Cascade)
+  level    IssueLevel
+  table    String
+  legacyId String?
+  message  String
+  data     Json?
+
+  @@index([runId, level])
+}
