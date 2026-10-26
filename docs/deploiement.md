@@ -29,6 +29,30 @@ Alternative : n'importe quel hébergeur Docker (Railway, Render, Fly, VPS) avec 
    placer dans `DATABASE_CA_CERT` (contenu PEM) pour vérifier le certificat du serveur. Sans lui,
    la connexion est chiffrée sans vérification du certificat (comportement libpq `require`).
 
+### Rôle dédié à l'application (recommandé)
+
+Plutôt que le rôle `postgres` (dont seul un propriétaire/administrateur du projet peut
+réinitialiser le mot de passe), créer un rôle de connexion propre à l'application dans
+*SQL Editor* — autorisé pour un membre « Developer » :
+
+```sql
+create role avencao_app with login password '<mot de passe long, ex. openssl rand -hex 24>';
+grant usage, create on schema public to avencao_app;
+alter role avencao_app set statement_timeout = '60s';
+alter role avencao_app connection limit 30;
+```
+
+Connexion via le pooler avec l'utilisateur `avencao_app.<ref>` (ports 6543 et 5432 comme
+ci-dessus). Les migrations et l'application doivent utiliser **le même rôle** : il est
+propriétaire des tables.
+
+### API de données Supabase
+
+Supabase expose le schéma `public` via son API (clé publique). Le CRM ne l'utilise pas : la
+migration `lock_supabase_data_api` retire tout droit aux rôles `anon` et `authenticated` et
+active la RLS sur toutes les tables (le propriétaire, c'est-à-dire l'application, n'est pas
+concerné). Les variables `NEXT_PUBLIC_SUPABASE_*` et `SUPABASE_SECRET_KEY` sont inutiles.
+
 ## 2. Migrations et données initiales
 
 Deux façons, toutes deux volontaires :
