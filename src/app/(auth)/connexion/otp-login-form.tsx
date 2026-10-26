@@ -16,7 +16,7 @@ const RESEND_DELAY_S = 30;
  * Connexion par code à usage unique : choix de l'adresse (liste déroulante si la liste des
  * accès est configurée), envoi d'un email avec un code et un lien, puis saisie du code.
  */
-export function OtpLoginForm({ emails }: { emails: string[] | null }) {
+export function OtpLoginForm({ emails, next = "/dashboard" }: { emails: string[] | null; next?: string }) {
   const tr = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -54,7 +54,7 @@ export function OtpLoginForm({ emails }: { emails: string[] | null }) {
         setError(res.error.status === 429 ? tr("Trop de tentatives. Patientez une minute avant de réessayer.") : tr("Code incorrect ou expiré."));
         return;
       }
-      router.replace("/dashboard");
+      router.replace(next);
       router.refresh();
     });
   }

@@ -12,7 +12,8 @@ export type NavIcon =
   | "reports"
   | "settings"
   | "missions"
-  | "earnings";
+  | "earnings"
+  | "claude";
 
 export interface NavItem {
   href: string;
@@ -38,5 +39,6 @@ export const NAV_ITEMS: NavItem[] = [
     anyOf: ["invoices.read", "costs.read", "payments.read", "expenses.read"],
   },
   { href: "/rapports", label: "Rapports", icon: "reports", anyOf: ["reports.operational", "reports.finance"] },
+  { href: "/claude", label: "Claude & MCP", icon: "claude", anyOf: ["assistant.use"] },
   { href: "/reglages", label: "Réglages", icon: "settings", anyOf: ["settings.manage", "users.manage"] },
 ];

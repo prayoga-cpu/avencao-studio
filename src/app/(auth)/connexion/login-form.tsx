@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
 import { useT } from "#i18n";
 
-export function LoginForm() {
+export function LoginForm({ next = "/dashboard" }: { next?: string }) {
   const router = useRouter();
   const tr = useT();
   const [pending, start] = useTransition();
@@ -41,7 +41,7 @@ export function LoginForm() {
             return;
           }
           // Accueil direct (un monteur est redirigé vers ses missions par la page elle-même).
-          router.replace("/dashboard");
+          router.replace(next);
           router.refresh();
         });
       }}

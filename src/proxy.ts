@@ -10,6 +10,9 @@ import { getSessionCookie } from "better-auth/cookies";
 export function proxy(request: NextRequest) {
   if (!getSessionCookie(request)) {
     const url = new URL("/connexion", request.url);
+    const { pathname, search } = request.nextUrl;
+    // Retour à la page demandée après connexion (ex. autorisation d'une application Claude).
+    if (pathname !== "/" && pathname !== "/dashboard") url.searchParams.set("suite", pathname + search);
     return NextResponse.redirect(url);
   }
   return NextResponse.next();
@@ -17,6 +20,6 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!api/|connexion|mot-de-passe|reinitialisation|acces-refuse|_next/static|_next/image|brand|icon.png|favicon.ico|robots.txt).*)",
+    "/((?!api/|\\.well-known/|connexion|mot-de-passe|reinitialisation|acces-refuse|_next/static|_next/image|brand|icon.png|favicon.ico|robots.txt).*)",
   ],
 };

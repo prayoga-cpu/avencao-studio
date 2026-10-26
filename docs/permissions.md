@@ -11,6 +11,7 @@ un bouton n'est jamais une protection.
 | **Responsable de production** | Clients, prospection, projets, vidéos, affectations, monteurs, planning, rapports opérationnels. Sans accès financier par défaut. |
 | Responsable de production **+ accès financier** (case cochée par un administrateur) | En plus : tarifs, coûts, ventes, factures, encaissements, règlements, charges, forfaits, marges projet, exports financiers. **Jamais** : marge globale, indicateurs financiers du tableau de bord, rapports financiers, réglages, utilisateurs. |
 | **Monteur** | Ses missions uniquement (brief, liens autorisés, retours, versions, checklist, temps), sa rémunération et ses règlements. Jamais : prix de vente, revenus, marges, notes internes, rémunération des autres. |
+| Claude (MCP) et bouton « Demander à Claude » | Administrateurs et responsables de production (`assistant.use`), en **lecture seule**, avec les mêmes filtres que leurs écrans. Jamais les monteurs. Voir [claude-mcp.md](claude-mcp.md). |
 | Client | Réservé à la phase 2 (portail) : aucun accès actuellement. |
 | Visiteur | Aucun accès métier (compte en attente). |
 

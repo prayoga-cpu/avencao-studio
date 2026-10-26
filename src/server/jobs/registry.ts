@@ -1,6 +1,7 @@
 import "server-only";
 import { todayInTimezone } from "@/lib/dates";
 import { prisma } from "../db";
+import { purgeMcpData } from "../mcp/oauth";
 import { generateDueRetainerPeriods } from "../services/retainers";
 import { runReminderScan } from "./reminders";
 import { getSettingsUncached } from "./settings";
@@ -12,7 +13,7 @@ import { getSettingsUncached } from "./settings";
  * Chaque exécution est tracée dans JobLog (relançable sans effet de bord).
  */
 export const JOBS = {
-  "reminders.scan": { cron: "0 * * * *", description: "Échéances proches, retards, validations en attente, coûts manquants" },
+  "reminders.scan": { cron: "0 * * * *", description: "Échéances proches, retards, validations en attente, coûts manquants ; nettoyage des jetons Claude expirés" },
   "retainers.generate": { cron: "15 2 * * *", description: "Génération des périodes de forfaits récurrents du mois" },
 } as const;
 
@@ -26,7 +27,10 @@ export async function runJob(name: JobName, key?: string) {
   const log = await prisma.jobLog.create({ data: { name, key: key ?? null, status: "RUNNING" } });
   try {
     let details: unknown;
-    if (name === "reminders.scan") details = await runReminderScan();
+    if (name === "reminders.scan") {
+      // Nettoyage des codes et jetons MCP expirés (idempotent) avec le passage des rappels.
+      details = { ...(await runReminderScan()), mcpCleanup: await purgeMcpData() };
+    }
     else {
       const settings = await getSettingsUncached();
       details = await generateDueRetainerPeriods(todayInTimezone(settings.timezone));

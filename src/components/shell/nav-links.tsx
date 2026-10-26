@@ -15,6 +15,7 @@ import {
   Users,
   Wallet,
   Banknote,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { NavIcon } from "./nav-config";
@@ -33,6 +34,7 @@ const ICONS: Record<NavIcon, React.ComponentType<{ className?: string }>> = {
   settings: Settings,
   missions: ListChecks,
   earnings: Banknote,
+  claude: Sparkles,
 };
 
 export function NavLinks({

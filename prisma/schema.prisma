@@ -407,6 +407,8 @@ model User {
   notes         Note[]
   activities    Activity[]
   timeEntries   TimeEntry[]
+  mcpAuthCodes  McpAuthCode[]
+  mcpTokens     McpToken[]
 
   @@index([role, status])
 }
@@ -1764,4 +1766,74 @@ model ImportIssue {
   data     Json?
 
   @@index([runId, level])
+}
+
+// ───────────────────────────── Claude : serveur MCP ─────────────────────────────
+
+enum McpTokenKind {
+  /// Jeton personnel créé par l'utilisateur (Claude Code, scripts).
+  PERSONAL
+  /// Jeton d'accès OAuth (1 h) délivré à une application Claude après accord de l'utilisateur.
+  OAUTH_ACCESS
+  /// Jeton de rafraîchissement OAuth (30 jours, à usage unique : rotation à chaque utilisation).
+  OAUTH_REFRESH
+}
+
+/// Application OAuth enregistrée dynamiquement (RFC 7591) : claude.ai, Claude Desktop, Claude Code…
+model McpClient {
+  id               String        @id @default(cuid())
+  /// Identifiant public OAuth (client_id).
+  clientId         String        @unique
+  /// Empreinte SHA-256 du secret (clients confidentiels uniquement).
+  clientSecretHash String?
+  name             String
+  redirectUris     String[]
+  createdAt        DateTime      @default(now())
+  lastUsedAt       DateTime?
+  authCodes        McpAuthCode[]
+  tokens           McpToken[]
+}
+
+/// Code d'autorisation OAuth (usage unique, 5 minutes, PKCE S256 obligatoire).
+model McpAuthCode {
+  id            String    @id @default(cuid())
+  codeHash      String    @unique
+  mcpClientId   String
+  client        McpClient @relation(fields: [mcpClientId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  redirectUri   String
+  codeChallenge String
+  scope         String
+  resource      String?
+  expiresAt     DateTime
+  usedAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([userId])
+}
+
+/// Jetons d'accès au serveur MCP. Seule l'empreinte SHA-256 est stockée.
+model McpToken {
+  id          String       @id @default(cuid())
+  kind        McpTokenKind
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mcpClientId String?
+  client      McpClient?   @relation(fields: [mcpClientId], references: [id], onDelete: Cascade)
+  /// Regroupe les jetons (accès + rafraîchissement) d'une même autorisation OAuth.
+  grantId     String?
+  /// Libellé d'un jeton personnel.
+  name        String?
+  tokenHash   String       @unique
+  /// Début du jeton, pour l'affichage (jamais le jeton complet).
+  prefix      String
+  scope       String       @default("crm:read")
+  expiresAt   DateTime?
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime     @default(now())
+
+  @@index([userId, kind])
+  @@index([grantId])
 }

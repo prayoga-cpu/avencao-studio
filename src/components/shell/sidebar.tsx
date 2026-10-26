@@ -14,6 +14,8 @@ import { NAV_ITEMS } from "./nav-config";
 import { NavLinks } from "./nav-links";
 import { getT } from "@/lib/i18n/server";
 import { LanguageToggle } from "./language-toggle";
+import { AssistantPanel } from "@/components/assistant/assistant-panel";
+import { hasClaudeConnection } from "@/server/mcp/oauth";
 
 /** Barre latérale (desktop ≈ 280 px) et barre supérieure mobile. Lit la session : rendue derrière <Suspense>. */
 export async function Sidebar() {
@@ -21,9 +23,11 @@ export async function Sidebar() {
   const actor = await getActor();
   if (!actor) redirect("/connexion");
   if (actor.role === "VISITOR" || actor.role === "CLIENT") redirect("/acces-refuse");
-  const [settings, unread] = await Promise.all([
+  const withClaude = can(actor, "assistant.use");
+  const [settings, unread, claudeConnected] = await Promise.all([
     getSettings(),
     prisma.notification.count({ where: { userId: actor.id, readAt: null } }),
+    withClaude ? hasClaudeConnection(actor.id) : false,
   ]);
   // Logo personnalisé (Réglages) servi par la route autorisée ; sinon logo Avencao fourni.
   const logoSrc = settings.logoAttachmentId ? `/api/files/${settings.logoAttachmentId}` : "/brand/logo-avencao.png";
@@ -98,6 +102,9 @@ export async function Sidebar() {
         {profile}
         <NavLinks items={items} />
       </aside>
+
+      {/* « Demander à Claude » flottant (ouvert / réduit / fermé), présent sur toutes les pages. */}
+      {withClaude ? <AssistantPanel connected={claudeConnected} finance={can(actor, "invoices.read")} /> : null}
     </>
   );
 }

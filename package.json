@@ -36,6 +36,7 @@
     "@dnd-kit/sortable": "10.0.0",
     "@dnd-kit/utilities": "3.2.2",
     "@hookform/resolvers": "6.0.0",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
     "@tanstack/react-table": "9.3.1",

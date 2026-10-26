@@ -58,7 +58,8 @@ export type Permission =
   | "legacy.reconcile"
   | "missions.own"
   | "earnings.own"
-  | "time.log";
+  | "time.log"
+  | "assistant.use";
 
 export interface Actor {
   id: string;
@@ -90,6 +91,8 @@ const PRODUCTION: Permission[] = [
   "planning.view",
   "notes.internal",
   "time.log",
+  // Assistant IA et connexion de Claude (MCP) : lecture seule, mêmes droits que l'écran.
+  "assistant.use",
 ];
 
 /** Accès financier activable explicitement pour un responsable de production (sans marge globale). */

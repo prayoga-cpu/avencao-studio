@@ -116,6 +116,7 @@ vente, marges, notes internes ni rémunération des autres ; toute correction fi
 - [Fonctionnalités disponibles et différées](docs/fonctionnalites.md)
 - [Définitions financières](docs/definitions-financieres.md)
 - [Rôles et permissions](docs/permissions.md)
+- [Claude : serveur MCP et bouton « Demander à Claude »](docs/claude-mcp.md)
 - [Workflow vidéo](docs/workflow-video.md)
 - [Architecture, cache et revalidation](docs/architecture.md)
 - [Jobs et worker](docs/jobs.md)

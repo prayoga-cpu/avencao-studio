@@ -40,6 +40,13 @@ serveur. Rien n'est simulé : une fonction absente est indiquée comme telle.
 | Prix spécifiques client | Modèle de données présent ; pas d'écran de saisie ni de pré-remplissage des ventes. |
 | Déploiement Docker | Images construites en intégration continue ; déploiement de référence sur Vercel + Supabase. |
 
+## Claude
+
+| Fonction | État |
+|---|---|
+| Serveur MCP (claude.ai, Claude Desktop, Claude Code) | Disponible : OAuth 2.1 + jetons personnels, 14 outils en lecture seule. |
+| Bouton « Demander à Claude » (ouvrir / réduire / fermer) | Disponible : la question s'ouvre dans le compte Claude de l'utilisateur ; aucune clé d'API ni coût côté CRM. |
+
 ## Différé (phase 2 ou décision nécessaire)
 
 | Sujet | Raison |
