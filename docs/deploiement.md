@@ -103,6 +103,19 @@ vierge avant la mise en service réelle).
 4. Déployer. Les aperçus (branches) fonctionnent aussi : leurs URLs sont acceptées par
    l'authentification.
 
+### Connexion et comptes
+
+- `LOGIN_EMAILS` (ex. `founder@prionation.io,cro@prionation.io,consult@prionation.io`) : ces
+  adresses apparaissent dans une liste déroulante sur la page de connexion et reçoivent un **code à
+  6 chiffres + un lien** (valables 10 minutes, usage unique). Leur compte est créé au premier accès
+  comme administrateur. Aucune autre adresse ne reçoit de code.
+- Les administrateurs créent les autres comptes dans *Réglages › Utilisateurs* : avec un mot de
+  passe (actif immédiatement) ou par lien d'invitation, et peuvent changer le mot de passe d'un
+  utilisateur (ses sessions sont fermées). Ces comptes se connectent par « Connexion par mot de passe ».
+- `EMAIL_FROM` doit être sur un domaine vérifié chez Resend (actuellement `no-reply@avencao.fr`).
+- Domaine de production : `APP_URL` / `BETTER_AUTH_URL` = `https://www.avencao.io` (le domaine nu
+  redirige vers www ; `EXTRA_TRUSTED_ORIGINS=https://avencao.io`).
+
 ### Tâches planifiées
 
 `vercel.json` déclare deux crons (heures UTC) : rappels à 00:00 UTC (08:00 à Makassar) et forfaits
