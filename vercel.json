@@ -1,8 +1,17 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
+  "regions": [
+    "dub1"
+  ],
   "crons": [
-    { "path": "/api/cron/reminders.scan", "schedule": "0 0 * * *" },
-    { "path": "/api/cron/retainers.generate", "schedule": "15 18 * * *" }
+    {
+      "path": "/api/cron/reminders.scan",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/retainers.generate",
+      "schedule": "15 18 * * *"
+    }
   ]
 }
