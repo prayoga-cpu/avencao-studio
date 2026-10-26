@@ -113,7 +113,7 @@ export function WorkflowActions({
             </fieldset>
           ) : null}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setTarget(null)} disabled={pending}>{tr("Retour")}</Button>
+            <Button variant="outline" onClick={() => setTarget(null)} disabled={pending}>{tr("Fermer")}</Button>
             <Button
               variant={target?.to === "CANCELLED" ? "destructive" : "default"}
               disabled={pending || reason.trim().length < 3}

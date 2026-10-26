@@ -111,7 +111,11 @@ export default async function DashboardPage(props: PageProps<"/dashboard">) {
       {m && prev && receivables && debt && monthly && byClient ? (
         <>
           {m.marginIsProvisional ? (
-            <Notice tone="warning" className="mt-5">{tr("Marges provisoires :")}{" "}{m.deliveredMissingCosts} {" "}{tr("coût(s) manquant(s) sur les livrables de la période, ou coûts non encore validés.")}</Notice>
+            <Notice tone="warning" className="mt-5">
+              {m.deliveredMissingCosts > 0
+                ? <>{tr("Marges provisoires :")}{" "}{m.deliveredMissingCosts} {" "}{tr("coût(s) manquant(s) sur les livrables de la période, ou coûts non encore validés.")}</>
+                : tr("Marges provisoires : des coûts des livrables de la période ne sont pas encore validés.")}
+            </Notice>
           ) : null}
           <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <KpiCard label={tr("CA facturé HT net")} value={<Money value={m.invoicedNetEur.toFixed(2)} />} basis={tr("Factures émises − avoirs · date d'émission")} delta={delta(tr, m.invoicedNetEur, prev.invoicedNetEur, previous.label)} href="/finances?onglet=factures" />
