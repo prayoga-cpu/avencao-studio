@@ -6,6 +6,7 @@ import { prisma } from "../db";
 import { UnauthenticatedError } from "../errors";
 import { assertCan, can, type Actor, type Permission } from "../policies";
 import { auth } from "./auth";
+import { isMasterAdmin } from "./login-policy";
 
 /**
  * Couche d'accès (DAL) : lit la session à chaque requête, recharge le rôle depuis la
@@ -27,14 +28,17 @@ export const getActor = cache(async (): Promise<Actor | null> => {
       editorProfile: { select: { id: true } },
     },
   });
-  if (!user || user.status !== "ACTIVE") return null;
+  if (!user) return null;
+  // Administrateur principal : accès complet, quel que soit l'état enregistré en base.
+  const master = isMasterAdmin(user.email);
+  if (!master && user.status !== "ACTIVE") return null;
   return {
     id: user.id,
     name: user.name,
     email: user.email,
     image: user.image,
-    role: user.role,
-    financeAccess: user.financeAccess,
+    role: master ? "ADMIN" : user.role,
+    financeAccess: master ? true : user.financeAccess,
     editorId: user.editorProfile?.id ?? null,
   };
 });

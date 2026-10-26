@@ -150,7 +150,17 @@ export function InviteForm({ editors, defaultEditorId }: { editors: { value: str
   );
 }
 
-export function UserAccessEditor({ user, isSelf }: { user: { id: string; role: Role; financeAccess: boolean; status: string; legacyRole: string | null; suggestedRole: Role | null }; isSelf: boolean }) {
+export function UserAccessEditor({
+  user,
+  isSelf,
+  isMaster = false,
+  canEditCredentials = true,
+}: {
+  user: { id: string; role: Role; financeAccess: boolean; status: string; legacyRole: string | null; suggestedRole: Role | null };
+  isSelf: boolean;
+  isMaster?: boolean;
+  canEditCredentials?: boolean;
+}) {
   const tr = useT();
   const [role, setRole] = useState<Role>(user.role);
   const [finance, setFinance] = useState(user.financeAccess);
@@ -158,6 +168,15 @@ export function UserAccessEditor({ user, isSelf }: { user: { id: string; role: R
   const [link, setLink] = useState<{ url: string; emailSent: boolean; expiresInHours: number } | null>(null);
   const { pending, run } = useAction();
   const changed = role !== user.role || finance !== user.financeAccess || active !== (user.status === "ACTIVE");
+  if (isMaster) {
+    // Administrateur principal : accès verrouillé ; mot de passe modifiable seulement par un autre principal.
+    return (
+      <div className="flex flex-wrap items-center gap-2 text-xs text-subtle">
+        <span>{tr("Accès complet permanent (configuration serveur)")}</span>
+        {canEditCredentials ? <SetPasswordDialog userId={user.id} /> : null}
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">

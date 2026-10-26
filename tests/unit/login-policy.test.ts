@@ -23,3 +23,14 @@ describe("politique de connexion", () => {
     expect(passwordLoginEnabled({ ...env, PASSWORD_LOGIN: "false" })).toBe(false);
   });
 });
+
+describe("administrateurs principaux", () => {
+  const env = { MASTER_ADMIN_EMAILS: "MrCaoEvan@gmail.com, prayogadevelopment@gmail.com,invalide" };
+  it("liste issue de la configuration serveur, casse indifférente", async () => {
+    const { isMasterAdmin, masterAdminEmails } = await import("@/server/auth/login-policy");
+    expect(masterAdminEmails(env)).toEqual(["mrcaoevan@gmail.com", "prayogadevelopment@gmail.com"]);
+    expect(isMasterAdmin("MRCAOEVAN@gmail.com", env)).toBe(true);
+    expect(isMasterAdmin("founder@prionation.io", env)).toBe(false);
+    expect(isMasterAdmin("mrcaoevan@gmail.com", {})).toBe(false);
+  });
+});

@@ -7,7 +7,7 @@ import { prisma } from "../db";
 import { sendMail } from "../mail";
 import { publicAppUrl, trustedOrigins } from "../app-url";
 import { sendLoginCodeEmail } from "./login-email";
-import { isLoginEmailAllowed, LOGIN_CODE_TTL_SECONDS, loginAllowlist, passwordLoginEnabled } from "./login-policy";
+import { isLoginEmailAllowed, isMasterAdmin, LOGIN_CODE_TTL_SECONDS, loginAllowlist, passwordLoginEnabled } from "./login-policy";
 
 /**
  * Better Auth 1.7 (Auth.js v5 étant toujours en bêta et son fournisseur email/mot
@@ -77,9 +77,10 @@ export const auth = betterAuth({
         before: async (session) => {
           const user = await prisma.user.findUnique({
             where: { id: session.userId },
-            select: { status: true, role: true },
+            select: { status: true, role: true, email: true },
           });
-          if (!user || user.status !== "ACTIVE" || user.role === "VISITOR" || user.role === "CLIENT") {
+          if (!user) return false;
+          if (!isMasterAdmin(user.email) && (user.status !== "ACTIVE" || user.role === "VISITOR" || user.role === "CLIENT")) {
             return false;
           }
           await prisma.user.update({ where: { id: session.userId }, data: { lastLoginAt: new Date() } });

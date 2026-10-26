@@ -6,6 +6,7 @@ un bouton n'est jamais une protection.
 
 | Rôle | Accès |
 |---|---|
+| **Administrateur principal** (`MASTER_ADMIN_EMAILS`) | Tout, en permanence : rôle et statut verrouillés ; mot de passe modifiable uniquement par un administrateur principal. |
 | **Administrateur** | Tout : finances, marges globales, rapports financiers, réglages, utilisateurs, imports, notes « administrateurs ». |
 | **Responsable de production** | Clients, prospection, projets, vidéos, affectations, monteurs, planning, rapports opérationnels. Sans accès financier par défaut. |
 | Responsable de production **+ accès financier** (case cochée par un administrateur) | En plus : tarifs, coûts, ventes, factures, encaissements, règlements, charges, forfaits, marges projet, exports financiers. **Jamais** : marge globale, indicateurs financiers du tableau de bord, rapports financiers, réglages, utilisateurs. |

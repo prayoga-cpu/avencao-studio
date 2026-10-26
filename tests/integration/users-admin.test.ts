@@ -1,7 +1,7 @@
 import { verifyPassword } from "better-auth/crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { ForbiddenError } from "@/server/errors";
-import { createUserWithPassword, setUserPassword } from "@/server/users";
+import { createUserWithPassword, setUserPassword, updateUserAccess } from "@/server/users";
 import { makeActor, prisma, resetDb } from "../support/db";
 
 async function storedHash(email: string) {
@@ -40,5 +40,30 @@ describe("comptes créés par un administrateur", () => {
     expect(await verifyPassword({ hash, password: "Ancien-mot-de-passe" })).toBe(false);
     expect(await prisma.session.count({ where: { userId: id } })).toBe(0);
     expect(await prisma.auditEvent.count({ where: { action: "user.password_set_by_admin", entityId: id } })).toBe(1);
+  });
+});
+
+describe("administrateurs principaux", () => {
+  beforeEach(async () => {
+    await resetDb();
+    process.env.MASTER_ADMIN_EMAILS = "maitre@exemple.fr,second@exemple.fr";
+  });
+
+  it("un autre administrateur ne peut ni rétrograder, ni désactiver, ni changer le mot de passe d'un principal", async () => {
+    const admin = await makeActor("ADMIN");
+    const { id } = await createUserWithPassword(admin, { email: "maitre@exemple.fr", name: "Maître", role: "ADMIN", financeAccess: true, password: "Mot-de-passe-maitre" });
+    await expect(updateUserAccess(admin, id, { role: "EDITOR", financeAccess: false, status: "ACTIVE" })).rejects.toThrow(/principal/);
+    await expect(updateUserAccess(admin, id, { role: "ADMIN", financeAccess: true, status: "DISABLED" })).rejects.toThrow(/principal/);
+    await expect(setUserPassword(admin, id, "Nouveau-mot-de-passe")).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it("un administrateur principal peut changer le mot de passe d'un autre principal", async () => {
+    const admin = await makeActor("ADMIN");
+    const { id } = await createUserWithPassword(admin, { email: "second@exemple.fr", name: "Second", role: "ADMIN", financeAccess: true, password: "Mot-de-passe-second" });
+    const master = { ...(await makeActor("ADMIN")), email: "maitre@exemple.fr" };
+    await setUserPassword(master, id, "Nouveau-mot-de-passe");
+    const { hash } = await storedHash("second@exemple.fr");
+    expect(await verifyPassword({ hash, password: "Nouveau-mot-de-passe" })).toBe(true);
+    delete process.env.MASTER_ADMIN_EMAILS;
   });
 });

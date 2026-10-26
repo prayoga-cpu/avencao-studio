@@ -18,6 +18,7 @@ import { formatDateOnly, formatDateTime } from "@/lib/dates";
 import { ROLE_LABELS, USER_STATUS_LABELS, VIDEO_TYPE_LABELS } from "@/lib/labels";
 import type { CurrencyCode } from "@/lib/money";
 import { requireActor } from "@/server/auth/session";
+import { isMasterAdmin } from "@/server/auth/login-policy";
 import { prisma } from "@/server/db";
 import { can, type Permission } from "@/server/policies";
 import { agencyToday } from "@/server/services/common";
@@ -94,10 +95,10 @@ export default async function SettingsPage(props: PageProps<"/reglages">) {
             rowKey={(u) => u.id}
             columns={[
               { key: "n", header: tr("Utilisateur"), cell: (u) => <>{u.name}<span className="block text-xs text-subtle">{u.email}{u.editorProfile ? tr(" · fiche {0}", [u.editorProfile.displayName]) : ""}</span></> },
-              { key: "r", header: tr("Rôle actuel"), cell: (u) => <span className="flex flex-wrap gap-1"><StatusBadge label={tr(ROLE_LABELS[u.role])} tone={u.role === "ADMIN" ? "brand" : "neutral"} />{u.financeAccess && u.role === "PRODUCTION_MANAGER" ? <StatusBadge label={tr("Finance")} tone="info" /> : null}</span> },
+              { key: "r", header: tr("Rôle actuel"), cell: (u) => <span className="flex flex-wrap gap-1">{isMasterAdmin(u.email) ? <StatusBadge label={tr("Administrateur principal")} tone="brand" title={tr("Accès complet permanent (configuration serveur)")} /> : <StatusBadge label={tr(ROLE_LABELS[u.role])} tone={u.role === "ADMIN" ? "brand" : "neutral"} />}{u.financeAccess && u.role === "PRODUCTION_MANAGER" ? <StatusBadge label={tr("Finance")} tone="info" /> : null}</span> },
               { key: "s", header: tr("Statut"), cell: (u) => <span className="flex flex-col gap-0.5"><StatusBadge label={tr(USER_STATUS_LABELS[u.status])} tone={u.status === "ACTIVE" ? "success" : "warning"} />{u.accounts.some((a) => a.providerId === "credential") ? null : <span className="text-xs text-warning">{tr("mot de passe non défini")}</span>}</span> },
               { key: "l", header: tr("Dernière connexion"), cell: (u) => (u.lastLoginAt ? formatDateTime(u.lastLoginAt, settings.timezone) : "—"), hideOnCard: true },
-              { key: "a", header: tr("Accès"), cell: (u) => <UserAccessEditor isSelf={u.id === actor.id} user={{ id: u.id, role: u.role, financeAccess: u.financeAccess, status: u.status, legacyRole: u.legacyRole, suggestedRole: u.suggestedRole }} /> },
+              { key: "a", header: tr("Accès"), cell: (u) => <UserAccessEditor isSelf={u.id === actor.id} isMaster={isMasterAdmin(u.email)} canEditCredentials={!isMasterAdmin(u.email) || isMasterAdmin(actor.email)} user={{ id: u.id, role: u.role, financeAccess: u.financeAccess, status: u.status, legacyRole: u.legacyRole, suggestedRole: u.suggestedRole }} /> },
             ]}
           />
           <p className="mt-2 text-xs text-faint">{tr("Désactiver un compte ou changer son rôle révoque immédiatement ses sessions. Les liens Drive ou Frame.io gardent leurs propres règles de partage : retirer un accès CRM ne les révoque pas.")}</p>

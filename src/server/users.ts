@@ -1,5 +1,6 @@
 import "server-only";
 import { publicAppUrl } from "./app-url";
+import { isMasterAdmin } from "./auth/login-policy";
 import { createHash, randomBytes } from "node:crypto";
 import { hashPassword } from "better-auth/crypto";
 import type { Role, TokenPurpose } from "@/generated/prisma/enums";
@@ -93,6 +94,7 @@ export async function inviteUser(
 export async function createResetLink(actor: Actor, userId: string): Promise<InviteResult> {
   assertCan(actor, "users.manage");
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  assertMayManageCredentials(actor, user.email);
   const token = await issueToken(user.id, "RESET", actor.id);
   const url = `${appUrl()}/mot-de-passe/${token}`;
   const mail = await sendMail({
@@ -115,6 +117,13 @@ export async function findValidToken(token: string) {
 }
 
 type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+/** Le mot de passe d'un administrateur principal n'est modifiable que par un administrateur principal. */
+function assertMayManageCredentials(actor: Actor, targetEmail: string) {
+  if (isMasterAdmin(targetEmail) && !isMasterAdmin(actor.email)) {
+    throw new ForbiddenError("Seul un administrateur principal peut modifier ce mot de passe.");
+  }
+}
 
 /** Mot de passe du compte « credential » Better Auth (création ou remplacement). */
 async function storeCredentialPassword(tx: TxClient, userId: string, hash: string) {
@@ -178,6 +187,7 @@ export async function setUserPassword(actor: Actor, userId: string, password: st
   assertPasswordPolicy(password);
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new DomainError("Utilisateur introuvable.");
+  assertMayManageCredentials(actor, user.email);
   const hash = await hashPassword(password);
   await prisma.$transaction(async (tx) => {
     await storeCredentialPassword(tx, userId, hash);
@@ -222,6 +232,9 @@ export async function updateUserAccess(
   assertCan(actor, "users.manage");
   if (!ASSIGNABLE_ROLES.includes(input.role)) throw new DomainError("Rôle non attribuable.");
   const target = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  if (isMasterAdmin(target.email)) {
+    throw new DomainError("Administrateur principal : rôle et statut non modifiables (configuration serveur).");
+  }
   if (target.id === actor.id && (input.role !== "ADMIN" || input.status !== "ACTIVE")) {
     throw new ForbiddenError("Vous ne pouvez pas retirer vos propres droits administrateur.");
   }

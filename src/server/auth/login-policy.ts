@@ -28,5 +28,21 @@ export function passwordLoginEnabled(env: Env = process.env): boolean {
   return env.PASSWORD_LOGIN !== "false";
 }
 
+/**
+ * Administrateurs principaux (MASTER_ADMIN_EMAILS, configuration serveur — jamais dans le code
+ * ni dans la base) : accès complet permanent ; leur rôle, leur statut et leur mot de passe ne
+ * peuvent pas être modifiés par un autre administrateur.
+ */
+export function masterAdminEmails(env: Env = process.env): string[] {
+  return (env.MASTER_ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));
+}
+
+export function isMasterAdmin(email: string | null | undefined, env: Env = process.env): boolean {
+  return !!email && masterAdminEmails(env).includes(email.trim().toLowerCase());
+}
+
 /** Validité du code et du lien de connexion. */
 export const LOGIN_CODE_TTL_SECONDS = 10 * 60;
