@@ -6,10 +6,15 @@ import { formatDurationSeconds, toDateOnlyString } from "@/lib/dates";
 import { requirePagePermission } from "@/server/auth/session";
 import { prisma } from "@/server/db";
 import { projectOptions } from "@/server/queries/options";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Modifier la vidéo" };
+export async function generateMetadata(): Promise<Metadata> {
+  const tr = await getT();
+  return { title: tr("Modifier la vidéo") };
+}
 
 export default async function EditVideoPage(props: PageProps<"/videos/[id]/modifier">) {
+  const tr = await getT();
   await requirePagePermission("videos.write");
   const { id } = await props.params;
   const [v, projects] = await Promise.all([prisma.video.findUnique({ where: { id } }), projectOptions()]);
@@ -19,7 +24,7 @@ export default async function EditVideoPage(props: PageProps<"/videos/[id]/modif
   const s = (x: string | null) => x ?? "";
   return (
     <div className="mx-auto max-w-4xl">
-      <PageHeader title={`Modifier — ${v.reference}`} />
+      <PageHeader title={tr("Modifier — {0}", [v.reference])} />
       <VideoForm
         videoId={v.id}
         hasDeadline

@@ -11,21 +11,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { PRIORITY, VIDEO_TYPE_LABELS } from "@/lib/labels";
 import { createVideosBulkAction } from "./actions";
 import { RATIOS, bulkVideosSchema } from "./schemas";
+import { useT } from "#i18n";
 
 /** « Ajouter six Reels » : création groupée avec lien de rushs commun. */
 export function BulkVideosDialog({ projectId, clientDeadline }: { projectId: string; clientDeadline: string }) {
+  const tr = useT();
   const [open, setOpen] = useState(false);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button size="sm">
-          <ListPlus aria-hidden /> Ajouter des vidéos
-        </Button>
+          <ListPlus aria-hidden /> {" "}{tr("Ajouter des vidéos")}</Button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Ajouter des vidéos au projet</DialogTitle>
-          <DialogDescription>Chaque vidéo reçoit sa référence stable et la checklist qualité. Avec un lien de rushs, elles passent directement « À attribuer ».</DialogDescription>
+          <DialogTitle>{tr("Ajouter des vidéos au projet")}</DialogTitle>
+          <DialogDescription>{tr("Chaque vidéo reçoit sa référence stable et la checklist qualité. Avec un lien de rushs, elles passent directement « À attribuer ».")}</DialogDescription>
         </DialogHeader>
         {open ? <BulkForm projectId={projectId} clientDeadline={clientDeadline} onDone={() => setOpen(false)} /> : null}
       </DialogContent>
@@ -34,6 +35,7 @@ export function BulkVideosDialog({ projectId, clientDeadline }: { projectId: str
 }
 
 function BulkForm({ projectId, clientDeadline, onDone }: { projectId: string; clientDeadline: string; onDone: () => void }) {
+  const tr = useT();
   const { form, onSubmit, pending, err } = useServerForm({
     schema: bulkVideosSchema,
     defaultValues: {
@@ -47,26 +49,26 @@ function BulkForm({ projectId, clientDeadline, onDone }: { projectId: string; cl
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
       <FormGrid>
-        <Field label="Nombre de vidéos" htmlFor="count" required error={err("count")}><Input inputMode="numeric" {...register("count")} /></Field>
-        <Field label="Type" htmlFor="b-type">
-          <NativeSelect {...register("type")}>{Object.entries(VIDEO_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</NativeSelect>
+        <Field label={tr("Nombre de vidéos")} htmlFor="count" required error={err("count")}><Input inputMode="numeric" {...register("count")} /></Field>
+        <Field label={tr("Type")} htmlFor="b-type">
+          <NativeSelect {...register("type")}>{Object.entries(VIDEO_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{tr(l)}</option>)}</NativeSelect>
         </Field>
-        <Field label="Modèle de titre" htmlFor="titlePattern" required error={err("titlePattern")} hint="{type} et {n} sont remplacés"><Input {...register("titlePattern")} /></Field>
-        <Field label="Priorité" htmlFor="b-priority">
-          <NativeSelect {...register("priority")}>{Object.entries(PRIORITY).map(([v, s]) => <option key={v} value={v}>{s.label}</option>)}</NativeSelect>
+        <Field label={tr("Modèle de titre")} htmlFor="titlePattern" required error={err("titlePattern")} hint={tr("{type} et {n} sont remplacés")}><Input {...register("titlePattern")} /></Field>
+        <Field label={tr("Priorité")} htmlFor="b-priority">
+          <NativeSelect {...register("priority")}>{Object.entries(PRIORITY).map(([v, s]) => <option key={v} value={v}>{tr(s.label)}</option>)}</NativeSelect>
         </Field>
-        <Field label="Ratio" htmlFor="b-ratio">
+        <Field label={tr("Ratio")} htmlFor="b-ratio">
           <NativeSelect {...register("ratio")}><option value="">—</option>{RATIOS.map((r) => <option key={r} value={r}>{r}</option>)}</NativeSelect>
         </Field>
-        <Field label="Format" htmlFor="b-format"><Input {...register("format")} /></Field>
-        <Field label="Durée finale attendue" htmlFor="b-exp" error={err("expectedDuration")}><Input {...register("expectedDuration")} /></Field>
-        <Field label="Heures estimées / vidéo" htmlFor="b-hours" error={err("estimatedHours")}><Input inputMode="decimal" {...register("estimatedHours")} /></Field>
-        <Field label="Deadline interne" htmlFor="b-int" error={err("internalDeadline")}><Input type="date" {...register("internalDeadline")} /></Field>
-        <Field label="Deadline client" htmlFor="b-cli" error={err("clientDeadline")}><Input type="date" {...register("clientDeadline")} /></Field>
-        <Field label="Lien des rushs (Drive / Dropbox)" htmlFor="b-rush" error={err("rushesUrl")} className="md:col-span-2"><Input type="url" placeholder="https://" {...register("rushesUrl")} /></Field>
-        <Field label="Brief commun" htmlFor="b-brief" className="md:col-span-2"><Textarea rows={3} {...register("brief")} /></Field>
+        <Field label={tr("Format")} htmlFor="b-format"><Input {...register("format")} /></Field>
+        <Field label={tr("Durée finale attendue")} htmlFor="b-exp" error={err("expectedDuration")}><Input {...register("expectedDuration")} /></Field>
+        <Field label={tr("Heures estimées / vidéo")} htmlFor="b-hours" error={err("estimatedHours")}><Input inputMode="decimal" {...register("estimatedHours")} /></Field>
+        <Field label={tr("Deadline interne")} htmlFor="b-int" error={err("internalDeadline")}><Input type="date" {...register("internalDeadline")} /></Field>
+        <Field label={tr("Deadline client")} htmlFor="b-cli" error={err("clientDeadline")}><Input type="date" {...register("clientDeadline")} /></Field>
+        <Field label={tr("Lien des rushs (Drive / Dropbox)")} htmlFor="b-rush" error={err("rushesUrl")} className="md:col-span-2"><Input type="url" placeholder={tr("https://")} {...register("rushesUrl")} /></Field>
+        <Field label={tr("Brief commun")} htmlFor="b-brief" className="md:col-span-2"><Textarea rows={3} {...register("brief")} /></Field>
       </FormGrid>
-      <FormActions pending={pending} submitLabel="Créer les vidéos" onCancel={onDone} />
+      <FormActions pending={pending} submitLabel={tr("Créer les vidéos")} onCancel={onDone} />
     </form>
   );
 }

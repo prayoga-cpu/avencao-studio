@@ -8,8 +8,10 @@ import { Field } from "@/components/app/field";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/app/password-input";
 import { setPasswordAction } from "./actions";
+import { useT } from "#i18n";
 
 export function SetPasswordForm({ token }: { token: string }) {
+  const tr = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [errors, setErrors] = useState<Record<string, string[] | undefined>>({});
@@ -30,21 +32,20 @@ export function SetPasswordForm({ token }: { token: string }) {
             toast.error(res.error);
             return;
           }
-          toast.success(res.message ?? "Mot de passe enregistré.");
+          toast.success(res.message ?? tr("Mot de passe enregistré."));
           router.replace("/connexion");
         });
       }}
     >
-      <Field label="Mot de passe" htmlFor="password" required hint="10 caractères minimum." error={errors.password?.[0]}>
+      <Field label={tr("Mot de passe")} htmlFor="password" required hint={tr("10 caractères minimum.")} error={errors.password?.[0]}>
         <PasswordInput name="password" autoComplete="new-password" required minLength={10} />
       </Field>
-      <Field label="Confirmation" htmlFor="confirm" required error={errors.confirm?.[0]}>
+      <Field label={tr("Confirmation")} htmlFor="confirm" required error={errors.confirm?.[0]}>
         <PasswordInput name="confirm" autoComplete="new-password" required minLength={10} />
       </Field>
       <Button type="submit" size="lg" disabled={pending}>
         {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-        Enregistrer mon mot de passe
-      </Button>
+        {tr("Enregistrer mon mot de passe")}</Button>
     </form>
   );
 }

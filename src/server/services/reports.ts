@@ -30,6 +30,8 @@ export interface ReportTable {
   title: string;
   dateBasis: string;
   notes?: string[];
+  /** Totaux par tranche (libellé traduisible + montant EUR). */
+  summary?: { label: string; amount: string | null }[];
   columns: ReportColumn[];
   rows: Record<string, string | null>[];
   totals?: Record<string, string | null>;
@@ -324,7 +326,7 @@ async function receivablesAging(): Promise<ReportTable> {
     key: "impayes",
     title: "Impayés et ancienneté des créances",
     dateBasis: `Au ${today} · ancienneté calculée depuis l'échéance`,
-    notes: [`Synthèse : ${Object.entries(AGING_LABELS).map(([k, l]) => `${l} ${m2(buckets.get(k) ?? new Decimal(0))} €`).join(" · ")}`],
+    summary: Object.entries(AGING_LABELS).map(([k, l]) => ({ label: l, amount: m2(buckets.get(k) ?? new Decimal(0)) })),
     columns: [
       { key: "number", label: "Facture" },
       { key: "client", label: "Client" },
@@ -419,20 +421,31 @@ async function outOfScope(actor: Actor, period: Pick<Period, "from" | "to" | "la
   };
 }
 
-/** Export CSV (séparateur « ; », BOM UTF-8 pour Excel, décimales avec virgule). */
-export function toCsv(report: ReportTable): string {
+/**
+ * Export CSV pour Excel (BOM UTF-8). Français : séparateur « ; » et virgule décimale ;
+ * anglais : « , » et point. `tr` traduit titres, colonnes et valeurs textuelles connues.
+ */
+export function toCsv(report: ReportTable, options: { locale?: "fr" | "en"; tr?: (text: string) => string } = {}): string {
+  const en = options.locale === "en";
+  const tr = options.tr ?? ((x: string) => x);
+  const sep = en ? "," : ";";
   const esc = (v: string | null | undefined) => {
     const s = v ?? "";
-    return /[;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    return s.includes(sep) || /["\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const fmt = (c: ReportColumn, v: string | null) => (v !== null && (c.kind === "money" || c.kind === "percent") ? v.replace(".", ",") : v);
+  const fmt = (c: ReportColumn, v: string | null) => {
+    if (v === null) return v;
+    if (c.kind === "money" || c.kind === "percent") return en ? v : v.replace(".", ",");
+    return tr(v);
+  };
   const lines = [
-    [`# ${report.title}`],
-    [`# Date de référence : ${report.dateBasis}`],
-    ...(report.notes ?? []).map((n) => [`# ${n}`]),
-    report.columns.map((c) => c.label + (c.kind === "money" ? " (EUR)" : c.kind === "percent" ? " (%)" : "")),
+    [`# ${tr(report.title)}`],
+    [`# ${tr("Date de référence")} : ${tr(report.dateBasis)}`],
+    ...(report.notes ?? []).map((n) => [`# ${tr(n)}`]),
+    ...(report.summary ? [[`# ${tr("Synthèse")} : ${report.summary.map((x) => `${tr(x.label)} ${x.amount} €`).join(" · ")}`]] : []),
+    report.columns.map((c) => tr(c.label) + (c.kind === "money" ? " (EUR)" : c.kind === "percent" ? " (%)" : "")),
     ...report.rows.map((r) => report.columns.map((c) => fmt(c, r[c.key] ?? null))),
     ...(report.totals ? [report.columns.map((c) => fmt(c, report.totals![c.key] ?? null))] : []),
   ];
-  return "﻿" + lines.map((l) => l.map(esc).join(";")).join("\r\n");
+  return "﻿" + lines.map((l) => l.map(esc).join(sep)).join("\r\n");
 }

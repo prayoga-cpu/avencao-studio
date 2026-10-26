@@ -18,8 +18,12 @@ import { can } from "@/server/policies";
 import { clientOptions, editorOptions } from "@/server/queries/options";
 import { getPlanning, type PlanningEvent } from "@/server/queries/planning";
 import { agencyToday } from "@/server/services/common";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Planning" };
+export async function generateMetadata(): Promise<Metadata> {
+  const tr = await getT();
+  return { title: tr("Planning") };
+}
 
 const KIND = {
   client: { label: "Client", cls: "border-l-brand bg-brand-soft" },
@@ -30,6 +34,7 @@ const KIND = {
 const DAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
 export default async function PlanningPage(props: PageProps<"/planning">) {
+  const tr = await getT();
   const actor = await requirePagePermission("planning.view");
   const params = await props.searchParams;
   const today = await agencyToday();
@@ -67,11 +72,11 @@ export default async function PlanningPage(props: PageProps<"/planning">) {
     <div className={cn("group flex items-start gap-1 rounded-md border-l-2 px-1.5 py-1 text-[0.72rem] leading-tight", KIND[e.kind].cls, e.overdue && "ring-1 ring-danger/60")}>
       <div className="min-w-0 flex-1">
         {e.href ? <Link href={e.href} className="block truncate font-medium hover:underline">{e.title}</Link> : <span className="block truncate font-medium">{e.title}</span>}
-        <span className="block truncate text-faint">{KIND[e.kind].label}{e.overdue ? " · en retard" : ""}</span>
+        <span className="block truncate text-faint">{tr(KIND[e.kind].label)}{e.overdue ? tr(" · en retard") : ""}</span>
       </div>
       {canMove && e.videoId && (e.kind === "client" || e.kind === "internal") ? (
         <span className="opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-          <MoveDeadlineButton videoId={e.videoId} field={e.kind === "client" ? "VIDEO_CLIENT" : "VIDEO_INTERNAL"} current={e.date} label={`${KIND[e.kind].label} — ${e.title}`} />
+          <MoveDeadlineButton videoId={e.videoId} field={e.kind === "client" ? "VIDEO_CLIENT" : "VIDEO_INTERNAL"} current={e.date} label={`${tr(KIND[e.kind].label)} — ${e.title}`} />
         </span>
       ) : null}
     </div>
@@ -80,13 +85,13 @@ export default async function PlanningPage(props: PageProps<"/planning">) {
   return (
     <>
       <PageHeader
-        title="Planning"
-        subtitle={staff ? "Deadlines internes et client, missions et indisponibilités. La charge se lit en heures estimées, pas en nombre de vidéos." : "Vos missions et échéances."}
+        title={tr("Planning")}
+        subtitle={staff ? tr("Deadlines internes et client, missions et indisponibilités. La charge se lit en heures estimées, pas en nombre de vidéos.") : tr("Vos missions et échéances.")}
         actions={
           <div className="flex items-center gap-1">
-            <Button asChild variant="outline" size="icon-sm"><Link href={href(step(-1))} aria-label="Période précédente"><ChevronLeft aria-hidden /></Link></Button>
-            <Button asChild variant="outline" size="sm"><Link href={href(today)}>Aujourd&apos;hui</Link></Button>
-            <Button asChild variant="outline" size="icon-sm"><Link href={href(step(1))} aria-label="Période suivante"><ChevronRight aria-hidden /></Link></Button>
+            <Button asChild variant="outline" size="icon-sm"><Link href={href(step(-1))} aria-label={tr("Période précédente")}><ChevronLeft aria-hidden /></Link></Button>
+            <Button asChild variant="outline" size="sm"><Link href={href(today)}>{tr("Aujourd'hui")}</Link></Button>
+            <Button asChild variant="outline" size="icon-sm"><Link href={href(step(1))} aria-label={tr("Période suivante")}><ChevronRight aria-hidden /></Link></Button>
           </div>
         }
       >
@@ -94,10 +99,10 @@ export default async function PlanningPage(props: PageProps<"/planning">) {
           <FilterBar
             showSearch={false}
             filters={[
-              { name: "monteur", label: "Monteur", options: editors },
-              { name: "client", label: "Client", options: clients },
-              { name: "priorite", label: "Priorité", options: enumOptions(PRIORITY) },
-              { name: "statut", label: "Étape", options: enumOptions(VIDEO_STATUS) },
+              { name: "monteur", label: tr("Monteur"), options: editors },
+              { name: "client", label: tr("Client"), options: clients },
+              { name: "priorite", label: tr("Priorité"), options: enumOptions(PRIORITY) },
+              { name: "statut", label: tr("Étape"), options: enumOptions(VIDEO_STATUS) },
             ]}
           />
         ) : null}
@@ -105,25 +110,25 @@ export default async function PlanningPage(props: PageProps<"/planning">) {
       <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-bold capitalize">{title}</h2>
         <div className="flex flex-wrap gap-2 text-xs">
-          {Object.entries(KIND).map(([k, v]) => <span key={k} className={cn("rounded border-l-2 px-2 py-0.5", v.cls)}>{v.label}</span>)}
+          {Object.entries(KIND).map(([k, v]) => <span key={k} className={cn("rounded border-l-2 px-2 py-0.5", v.cls)}>{tr(v.label)}</span>)}
         </div>
       </div>
-      <TabLinks tabs={[{ value: "mois", label: "Mois" }, { value: "semaine", label: "Semaine" }, { value: "liste", label: "Liste" }]} active={mode} basePath="/planning" param="mode" extraParams={extra} />
+      <TabLinks tabs={[{ value: "mois", label: tr("Mois") }, { value: "semaine", label: tr("Semaine") }, { value: "liste", label: tr("Liste") }]} active={mode} basePath="/planning" param="mode" extraParams={extra} />
 
       {mode === "liste" ? (
-        events.length === 0 ? <EmptyState title="Aucune échéance sur ces 4 semaines" /> : (
+        events.length === 0 ? <EmptyState title={tr("Aucune échéance sur ces 4 semaines")} /> : (
           <ol className="flex flex-col gap-4">
             {[...byDay.entries()].map(([day, list]) => (
               <li key={day}>
-                <h3 className={cn("mb-1.5 text-sm font-semibold", day === today && "text-brand", day < today && "text-subtle")}>{formatDateOnly(day)}{day === today ? " · aujourd'hui" : ""}</h3>
+                <h3 className={cn("mb-1.5 text-sm font-semibold", day === today && "text-brand", day < today && "text-subtle")}>{formatDateOnly(day)}{day === today ? tr(" · aujourd'hui") : ""}</h3>
                 <ul className="flex flex-col gap-1.5">
                   {list.map((e) => (
                     <li key={e.id} className={cn("flex flex-wrap items-center gap-2 rounded-lg border-l-2 px-3 py-2 text-sm", KIND[e.kind].cls)}>
-                      <span className="w-16 shrink-0 text-xs text-subtle">{KIND[e.kind].label}</span>
+                      <span className="w-16 shrink-0 text-xs text-subtle">{tr(KIND[e.kind].label)}</span>
                       {e.href ? <Link href={e.href} className="min-w-0 flex-1 font-medium hover:underline">{e.title}</Link> : <span className="min-w-0 flex-1 font-medium">{e.title}</span>}
                       <span className="text-xs text-subtle">{e.subtitle}</span>
                       {e.status ? <StatusBadge {...VIDEO_STATUS[e.status]} /> : null}
-                      {e.overdue ? <StatusBadge label="En retard" tone="danger" /> : null}
+                      {e.overdue ? <StatusBadge label={tr("En retard")} tone="danger" /> : null}
                       {canMove && e.videoId && (e.kind === "client" || e.kind === "internal") ? <MoveDeadlineButton videoId={e.videoId} field={e.kind === "client" ? "VIDEO_CLIENT" : "VIDEO_INTERNAL"} current={e.date} label={e.title} /> : null}
                     </li>
                   ))}
@@ -144,7 +149,7 @@ export default async function PlanningPage(props: PageProps<"/planning">) {
                   <p className={cn("mb-1 text-right text-xs", day === today ? "font-bold text-brand" : "text-faint")}>{Number(day.slice(8))}</p>
                   <div className="flex flex-col gap-1">
                     {list.slice(0, mode === "mois" ? 4 : 30).map((e) => <EventChip key={e.id} e={e} />)}
-                    {mode === "mois" && list.length > 4 ? <Link href={href(day, "liste")} className="text-[0.7rem] text-brand hover:underline">+{list.length - 4} autres</Link> : null}
+                    {mode === "mois" && list.length > 4 ? <Link href={href(day, "liste")} className="text-[0.7rem] text-brand hover:underline">+{list.length - 4} {" "}{tr("autres")}</Link> : null}
                   </div>
                 </div>
               );
@@ -153,13 +158,13 @@ export default async function PlanningPage(props: PageProps<"/planning">) {
         </div>
       )}
       {staff && load.length ? (
-        <Section title="Heures réservées sur la période affichée" description="Missions actives avec échéance dans la période (heures estimées). Les heures réellement saisies sont visibles sur chaque vidéo." className="mt-5">
+        <Section title={tr("Heures réservées sur la période affichée")} description={tr("Missions actives avec échéance dans la période (heures estimées). Les heures réellement saisies sont visibles sur chaque vidéo.")} className="mt-5">
           <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {load.map((l) => (
               <li key={l.name} className="rounded-lg border border-border p-2.5 text-sm">
                 <p className="font-semibold">{l.name}</p>
-                <p className="num text-subtle">{l.planned} h prévues</p>
-                {l.missing ? <p className="text-xs text-warning">{l.missing} mission(s) sans estimation : charge incomplète</p> : null}
+                <p className="num text-subtle">{l.planned} {" "}{tr("h prévues")}</p>
+                {l.missing ? <p className="text-xs text-warning">{l.missing} {" "}{tr("mission(s) sans estimation : charge incomplète")}</p> : null}
               </li>
             ))}
           </ul>

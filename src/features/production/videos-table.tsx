@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import type { Priority, VideoStatus } from "@/generated/prisma/enums";
 import type { VideoListRow } from "@/server/queries/production";
 import { bulkVideoAction } from "./actions";
+import { useT } from "#i18n";
 
 const features = tableFeatures({
   rowSortingFeature,
@@ -36,6 +37,7 @@ const features = tableFeatures({
 const helper = createColumnHelper<typeof features, VideoListRow>();
 
 export function VideosTable({ rows, showFinance, canBulk }: { rows: VideoListRow[]; showFinance: boolean; canBulk: boolean }) {
+  const tr = useT();
   const columns = useMemo(
     () =>
       helper.columns([
@@ -46,7 +48,7 @@ export function VideosTable({ rows, showFinance, canBulk }: { rows: VideoListRow
                 header: ({ table }) => (
                   <input
                     type="checkbox"
-                    aria-label="Tout sélectionner"
+                    aria-label={tr("Tout sélectionner")}
                     className="size-4 accent-[var(--av-accent)]"
                     checked={table.getIsAllRowsSelected()}
                     onChange={() => table.toggleAllRowsSelected()}
@@ -55,7 +57,7 @@ export function VideosTable({ rows, showFinance, canBulk }: { rows: VideoListRow
                 cell: ({ row }) => (
                   <input
                     type="checkbox"
-                    aria-label={`Sélectionner ${row.original.reference}`}
+                    aria-label={tr("Sélectionner {0}", [row.original.reference])}
                     className="size-4 accent-[var(--av-accent)]"
                     checked={row.getIsSelected()}
                     onChange={() => row.toggleSelected()}
@@ -65,53 +67,53 @@ export function VideosTable({ rows, showFinance, canBulk }: { rows: VideoListRow
             ]
           : []),
         helper.accessor("reference", {
-          header: "Vidéo",
+          header: tr("Vidéo"),
           sortFn: "alphanumeric",
           cell: ({ row }) => (
             <Link href={`/videos/${row.original.id}`} className="hover:text-brand hover:underline">
-              <span className="text-xs text-faint">{row.original.reference} · {VIDEO_TYPE_LABELS[row.original.type]}</span>
+              <span className="text-xs text-faint">{row.original.reference} · {tr(VIDEO_TYPE_LABELS[row.original.type])}</span>
               <span className="block font-medium text-foreground">{row.original.title}</span>
             </Link>
           ),
         }),
-        helper.accessor((r) => r.client.displayName, { id: "client", header: "Client", sortFn: "text" }),
+        helper.accessor((r) => r.client.displayName, { id: "client", header: tr("Client"), sortFn: "text" }),
         helper.accessor("status", {
-          header: "Étape",
+          header: tr("Étape"),
           cell: ({ row }) => (
             <span className="flex flex-wrap gap-1">
               <StatusBadge {...VIDEO_STATUS[row.original.status]} />
-              {row.original.isBlocked ? <StatusBadge label="Bloquée" tone="danger" title={row.original.blockedReason ?? undefined} /> : null}
+              {row.original.isBlocked ? <StatusBadge label={tr("Bloquée")} tone="danger" title={row.original.blockedReason ?? undefined} /> : null}
             </span>
           ),
         }),
-        helper.accessor("priority", { header: "Priorité", cell: ({ row }) => <StatusBadge {...PRIORITY[row.original.priority]} /> }),
-        helper.accessor((r) => r.editors.join(", "), { id: "editors", header: "Monteur(s)", cell: ({ getValue }) => getValue() || <span className="text-warning">non attribuée</span> }),
+        helper.accessor("priority", { header: tr("Priorité"), cell: ({ row }) => <StatusBadge {...PRIORITY[row.original.priority]} /> }),
+        helper.accessor((r) => r.editors.join(", "), { id: "editors", header: tr("Monteur(s)"), cell: ({ getValue }) => getValue() || <span className="text-warning">{tr("non attribuée")}</span> }),
         helper.accessor((r) => r.clientDeadline ?? "9999", {
           id: "deadline",
-          header: "Deadline client",
+          header: tr("Deadline client"),
           sortFn: "alphanumeric",
           cell: ({ row }) => (
             <span className="flex flex-col">
               <span className={cn("num", row.original.overdue ? "font-semibold text-danger" : row.original.dueSoon && "text-warning")}>
                 {formatDateOnly(row.original.clientDeadline)}
-                {row.original.overdue ? " · retard" : ""}
+                {row.original.overdue ? tr(" · retard") : ""}
               </span>
-              <span className="num text-xs text-faint">Interne : {formatDateOnly(row.original.internalDeadline)}</span>
+              <span className="num text-xs text-faint">{tr("Interne :")}{" "}{formatDateOnly(row.original.internalDeadline)}</span>
             </span>
           ),
         }),
         ...(showFinance
           ? [
-              helper.accessor((r) => r.finance?.revenueEur ?? "0", { id: "revenue", header: "Revenu alloué", cell: ({ row }) => <Money value={row.original.finance?.revenueEur} /> }),
+              helper.accessor((r) => r.finance?.revenueEur ?? "0", { id: "revenue", header: tr("Revenu alloué"), cell: ({ row }) => <Money value={row.original.finance?.revenueEur} /> }),
               helper.accessor((r) => r.finance?.marginEur ?? "0", {
                 id: "margin",
-                header: "Marge",
+                header: tr("Marge"),
                 cell: ({ row }) =>
                   row.original.finance ? (
                     <span className="flex flex-col items-end">
                       <Money value={row.original.finance.marginEur} colorize />
                       <span className={cn("text-xs", row.original.finance.missing ? "text-warning" : "text-subtle")}>
-                        {row.original.finance.missing ? `${row.original.finance.missing} coût(s) manquant(s)` : <Percent value={row.original.finance.ratePct} />}
+                        {row.original.finance.missing ? tr("{0} coût(s) manquant(s)", [row.original.finance.missing]) : <Percent value={row.original.finance.ratePct} />}
                       </span>
                     </span>
                   ) : null,
@@ -119,7 +121,7 @@ export function VideosTable({ rows, showFinance, canBulk }: { rows: VideoListRow
             ]
           : []),
       ]),
-    [canBulk, showFinance],
+    [canBulk, showFinance, tr],
   );
 
   const table = useTable({ features, columns, data: rows, getRowId: (r) => r.id });
@@ -130,7 +132,7 @@ export function VideosTable({ rows, showFinance, canBulk }: { rows: VideoListRow
       {canBulk && selected.length > 0 ? <BulkBar selected={selected} onDone={() => table.resetRowSelection()} /> : null}
       <div className="hidden overflow-x-auto rounded-xl border border-brand-border md:block av-scroll">
         <table className="w-full min-w-[820px] text-sm">
-          <caption className="sr-only">Liste des vidéos</caption>
+          <caption className="sr-only">{tr("Liste des vidéos")}</caption>
           <thead>
             {table.getHeaderGroups().map((g) => (
               <tr key={g.id} className="bg-bordeaux">
@@ -183,9 +185,9 @@ export function VideosTable({ rows, showFinance, canBulk }: { rows: VideoListRow
             </Link>
             <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
               <StatusBadge {...VIDEO_STATUS[r.status]} />
-              {r.isBlocked ? <StatusBadge label="Bloquée" tone="danger" /> : null}
-              <span className={cn("num", r.overdue ? "font-semibold text-danger" : "text-subtle")}>Client : {formatDateOnly(r.clientDeadline)}</span>
-              <span className="text-subtle">· {r.editors.join(", ") || "non attribuée"}</span>
+              {r.isBlocked ? <StatusBadge label={tr("Bloquée")} tone="danger" /> : null}
+              <span className={cn("num", r.overdue ? "font-semibold text-danger" : "text-subtle")}>{tr("Client :")}{" "}{formatDateOnly(r.clientDeadline)}</span>
+              <span className="text-subtle">· {r.editors.join(", ") || tr("non attribuée")}</span>
             </div>
           </li>
         ))}
@@ -197,39 +199,39 @@ export function VideosTable({ rows, showFinance, canBulk }: { rows: VideoListRow
 const BULK_TARGETS: VideoStatus[] = ["WAITING_RUSHES", "TO_ASSIGN", "EDITING", "CLIENT_REVIEW", "APPROVED", "DELIVERED", "ARCHIVED"];
 
 function BulkBar({ selected, onDone }: { selected: VideoListRow[]; onDone: () => void }) {
+  const tr = useT();
   const [priority, setPriority] = useState<Priority | "">("");
   const [to, setTo] = useState<VideoStatus | "">("");
   const [reason, setReason] = useState("");
   const { pending, run } = useAction();
   return (
-    <div role="region" aria-label="Actions groupées" className="flex flex-wrap items-center gap-2 rounded-xl border border-brand bg-brand-soft p-3 text-sm">
-      <span className="font-semibold">{selected.length} sélectionnée(s)</span>
-      <NativeSelect aria-label="Priorité" className="w-auto" value={priority} onChange={(e) => setPriority(e.target.value as Priority | "")}>
-        <option value="">Changer la priorité…</option>
-        {Object.entries(PRIORITY).map(([v, p]) => <option key={v} value={v}>{p.label}</option>)}
+    <div role="region" aria-label={tr("Actions groupées")} className="flex flex-wrap items-center gap-2 rounded-xl border border-brand bg-brand-soft p-3 text-sm">
+      <span className="font-semibold">{selected.length} {" "}{tr("sélectionnée(s)")}</span>
+      <NativeSelect aria-label={tr("Priorité")} className="w-auto" value={priority} onChange={(e) => setPriority(e.target.value as Priority | "")}>
+        <option value="">{tr("Changer la priorité…")}</option>
+        {Object.entries(PRIORITY).map(([v, p]) => <option key={v} value={v}>{tr(p.label)}</option>)}
       </NativeSelect>
-      <NativeSelect aria-label="Étape" className="w-auto" value={to} onChange={(e) => setTo(e.target.value as VideoStatus | "")}>
-        <option value="">Passer à l&apos;étape…</option>
-        {BULK_TARGETS.map((s) => <option key={s} value={s}>{VIDEO_STATUS[s].label}</option>)}
+      <NativeSelect aria-label={tr("Étape")} className="w-auto" value={to} onChange={(e) => setTo(e.target.value as VideoStatus | "")}>
+        <option value="">{tr("Passer à l'étape…")}</option>
+        {BULK_TARGETS.map((s) => <option key={s} value={s}>{tr(VIDEO_STATUS[s].label)}</option>)}
       </NativeSelect>
-      {to ? <Input aria-label="Motif" className="w-56" placeholder="Motif (si exigé)" value={reason} onChange={(e) => setReason(e.target.value)} /> : null}
+      {to ? <Input aria-label={tr("Motif")} className="w-56" placeholder={tr("Motif (si exigé)")} value={reason} onChange={(e) => setReason(e.target.value)} /> : null}
       <Button
         size="sm"
         disabled={pending || (!priority && !to)}
         onClick={() =>
           run(() => bulkVideoAction({ ids: selected.map((s) => s.id), priority: priority || undefined, to: to || undefined, reason }), {
             onSuccess: (r) => {
-              toast.success(`${r.ok} mise(s) à jour.`);
-              if (r.errors.length) toast.warning(`${r.errors.length} refus : ${r.errors.slice(0, 3).join(" · ")}${r.errors.length > 3 ? "…" : ""}`, { duration: 10000 });
+              toast.success(tr("{0} mise(s) à jour.", [r.ok]));
+              if (r.errors.length) toast.warning(tr("{0} refus : {1}{2}", [r.errors.length, r.errors.slice(0, 3).join(" · "), r.errors.length > 3 ? "…" : ""]), { duration: 10000 });
               onDone();
             },
           })
         }
       >
         {pending ? <Loader2 className="animate-spin" aria-hidden /> : <ShieldAlert aria-hidden />}
-        Appliquer
-      </Button>
-      <p className="w-full text-xs text-subtle">Chaque vidéo est vérifiée individuellement (droits et workflow) : les refus sont listés.</p>
+        {tr("Appliquer")}</Button>
+      <p className="w-full text-xs text-subtle">{tr("Chaque vidéo est vérifiée individuellement (droits et workflow) : les refus sont listés.")}</p>
     </div>
   );
 }

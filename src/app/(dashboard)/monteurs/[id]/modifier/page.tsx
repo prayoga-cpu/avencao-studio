@@ -5,10 +5,15 @@ import { EditorForm } from "@/features/editors/editor-form";
 import { requirePagePermission } from "@/server/auth/session";
 import { prisma } from "@/server/db";
 import { can } from "@/server/policies";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Modifier le prestataire" };
+export async function generateMetadata(): Promise<Metadata> {
+  const tr = await getT();
+  return { title: tr("Modifier le prestataire") };
+}
 
 export default async function EditEditorPage(props: PageProps<"/monteurs/[id]/modifier">) {
+  const tr = await getT();
   const actor = await requirePagePermission("editors.write");
   const { id } = await props.params;
   const e = await prisma.editorProfile.findUnique({ where: { id } });
@@ -16,7 +21,7 @@ export default async function EditEditorPage(props: PageProps<"/monteurs/[id]/mo
   const s = (v: string | null) => v ?? "";
   return (
     <div className="mx-auto max-w-4xl">
-      <PageHeader title={`Modifier — ${e.displayName}`} />
+      <PageHeader title={tr("Modifier — {0}", [e.displayName])} />
       <EditorForm
         editorId={e.id}
         canAppraise={can(actor, "editors.appraisal")}

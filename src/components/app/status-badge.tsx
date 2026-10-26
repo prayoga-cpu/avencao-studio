@@ -1,5 +1,6 @@
 import type { Tone } from "@/lib/labels";
 import { cn } from "@/lib/utils";
+import { useT } from "#i18n";
 
 const TONES: Record<Tone, string> = {
   neutral: "bg-surface-3 text-foreground border-white/10",
@@ -13,16 +14,17 @@ const TONES: Record<Tone, string> = {
 
 /** Badge de statut : libellé texte toujours présent (la couleur n'est qu'un repère). */
 export function StatusBadge({ label, tone = "neutral", className, title }: { label: string; tone?: Tone; className?: string; title?: string }) {
+  const tr = useT();
   return (
     <span
-      title={title}
+      title={tr(title) ?? undefined}
       className={cn(
         "inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold",
         TONES[tone],
         className,
       )}
     >
-      {label}
+      {tr(label)}
     </span>
   );
 }

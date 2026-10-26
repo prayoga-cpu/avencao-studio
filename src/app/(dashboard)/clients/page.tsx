@@ -15,10 +15,15 @@ import { can } from "@/server/policies";
 import { listClients } from "@/server/queries/clients";
 import { staffOptions, tagOptions } from "@/server/queries/options";
 import { agencyToday } from "@/server/services/common";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Clients" };
+export async function generateMetadata(): Promise<Metadata> {
+  const tr = await getT();
+  return { title: tr("Clients") };
+}
 
 export default async function ClientsPage(props: PageProps<"/clients">) {
+  const tr = await getT();
   const actor = await requirePagePermission("clients.read");
   const params = await props.searchParams;
   const page = pageFrom(params);
@@ -31,33 +36,31 @@ export default async function ClientsPage(props: PageProps<"/clients">) {
   return (
     <>
       <PageHeader
-        title="Clients"
-        subtitle="Fiches clients, contacts, historique et relances. Les archivés sont masqués par défaut."
+        title={tr("Clients")}
+        subtitle={tr("Fiches clients, contacts, historique et relances. Les archivés sont masqués par défaut.")}
         actions={
           can(actor, "clients.write") ? (
             <>
               {can(actor, "clients.import") ? (
                 <Button asChild variant="outline">
                   <Link href="/clients/import">
-                    <Upload aria-hidden /> Import CSV
-                  </Link>
+                    <Upload aria-hidden /> {" "}{tr("Import CSV")}</Link>
                 </Button>
               ) : null}
               <Button asChild>
                 <Link href="/clients/nouveau">
-                  <Plus aria-hidden /> Nouveau client
-                </Link>
+                  <Plus aria-hidden /> {" "}{tr("Nouveau client")}</Link>
               </Button>
             </>
           ) : null
         }
       >
         <FilterBar
-          searchPlaceholder="Nom, email, contact…"
+          searchPlaceholder={tr("Nom, email, contact…")}
           filters={[
-            { name: "statut", label: "Statut", options: enumOptions(CLIENT_STATUS), allLabel: "Statut : actifs et prospects" },
-            { name: "tag", label: "Étiquette", options: tags },
-            { name: "responsable", label: "Responsable", options: owners },
+            { name: "statut", label: tr("Statut"), options: enumOptions(CLIENT_STATUS), allLabel: tr("Statut : actifs et prospects") },
+            { name: "tag", label: tr("Étiquette"), options: tags },
+            { name: "responsable", label: tr("Responsable"), options: owners },
           ]}
         />
       </PageHeader>
@@ -65,37 +68,37 @@ export default async function ClientsPage(props: PageProps<"/clients">) {
         rows={rows}
         rowKey={(r) => r.id}
         rowHref={(r) => `/clients/${r.id}`}
-        caption="Liste des clients"
+        caption={tr("Liste des clients")}
         empty={
           <EmptyState
-            title={params.q || params.statut || params.tag ? "Aucun client ne correspond à ces filtres" : "Aucun client pour l'instant"}
-            description="Créez votre premier client ou importez une liste CSV."
-            action={can(actor, "clients.write") ? <Button asChild><Link href="/clients/nouveau">Nouveau client</Link></Button> : null}
+            title={params.q || params.statut || params.tag ? tr("Aucun client ne correspond à ces filtres") : tr("Aucun client pour l'instant")}
+            description={tr("Créez votre premier client ou importez une liste CSV.")}
+            action={can(actor, "clients.write") ? <Button asChild><Link href="/clients/nouveau">{tr("Nouveau client")}</Link></Button> : null}
           />
         }
         columns={[
-          { key: "name", header: "Client", cell: (r) => r.displayName },
-          { key: "status", header: "Statut", cell: (r) => <StatusBadge {...CLIENT_STATUS[r.status]} /> },
-          { key: "contact", header: "Contact principal", cell: (r) => r.contact ?? "—" },
-          { key: "email", header: "Email", cell: (r) => r.email ?? "—", hideOnCard: true },
-          { key: "projects", header: "Projets en cours", cell: (r) => r.activeProjects, numeric: true },
+          { key: "name", header: tr("Client"), cell: (r) => r.displayName },
+          { key: "status", header: tr("Statut"), cell: (r) => <StatusBadge {...CLIENT_STATUS[r.status]} /> },
+          { key: "contact", header: tr("Contact principal"), cell: (r) => r.contact ?? "—" },
+          { key: "email", header: tr("Email"), cell: (r) => r.email ?? "—", hideOnCard: true },
+          { key: "projects", header: tr("Projets en cours"), cell: (r) => r.activeProjects, numeric: true },
           {
             key: "follow",
-            header: "Prochaine relance",
+            header: tr("Prochaine relance"),
             cell: (r) =>
               r.nextFollowUpOn ? (
                 <span className={r.nextFollowUpOn <= today ? "font-semibold text-warning" : undefined}>
                   {formatDateOnly(r.nextFollowUpOn)}
-                  {r.nextFollowUpOn <= today ? " · à relancer" : ""}
+                  {r.nextFollowUpOn <= today ? tr(" · à relancer") : ""}
                 </span>
               ) : (
                 "—"
               ),
           },
-          { key: "owner", header: "Responsable", cell: (r) => r.owner ?? "—", hideOnCard: true },
+          { key: "owner", header: tr("Responsable"), cell: (r) => r.owner ?? "—", hideOnCard: true },
           {
             key: "tags",
-            header: "Étiquettes",
+            header: tr("Étiquettes"),
             hideOnCard: true,
             cell: (r) => (r.tags.length ? <span className="flex flex-wrap gap-1">{r.tags.map((t) => <StatusBadge key={t} label={t} tone="muted" />)}</span> : "—"),
           },

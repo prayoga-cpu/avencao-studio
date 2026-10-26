@@ -13,10 +13,15 @@ import { requireActor } from "@/server/auth/session";
 import { prisma } from "@/server/db";
 import { getSettings } from "@/server/settings";
 import { cn } from "@/lib/utils";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Notifications" };
+export async function generateMetadata(): Promise<Metadata> {
+  const tr = await getT();
+  return { title: tr("Notifications") };
+}
 
 export default async function NotificationsPage() {
+  const tr = await getT();
   const actor = await requireActor();
   const [items, prefs, settings] = await Promise.all([
     prisma.notification.findMany({ where: { userId: actor.id }, orderBy: { createdAt: "desc" }, take: 100 }),
@@ -28,14 +33,14 @@ export default async function NotificationsPage() {
   return (
     <>
       <PageHeader
-        title="Notifications"
-        subtitle="Notifications internes uniquement. Aucun email ni WhatsApp n'est envoyé sans canal connecté et activé."
-        actions={unread ? <ActionButton size="sm" action={markNotificationsReadAction.bind(null, "all")}>Tout marquer comme lu ({unread})</ActionButton> : null}
+        title={tr("Notifications")}
+        subtitle={tr("Notifications internes uniquement. Aucun email ni WhatsApp n'est envoyé sans canal connecté et activé.")}
+        actions={unread ? <ActionButton size="sm" action={markNotificationsReadAction.bind(null, "all")}>{tr("Tout marquer comme lu (")}{unread})</ActionButton> : null}
       />
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-        <Section title="Récentes" className="xl:col-span-2" bodyClassName="p-0">
+        <Section title={tr("Récentes")} className="xl:col-span-2" bodyClassName="p-0">
           {items.length === 0 ? (
-            <EmptyState className="m-4" title="Aucune notification" description="Missions attribuées, échéances proches, retards, retours, validations, seuil de marge, coûts manquants." />
+            <EmptyState className="m-4" title={tr("Aucune notification")} description={tr("Missions attribuées, échéances proches, retards, retours, validations, seuil de marge, coûts manquants.")} />
           ) : (
             <ul className="divide-y divide-border">
               {items.map((n) => (
@@ -43,26 +48,26 @@ export default async function NotificationsPage() {
                   <span className={cn("mt-1.5 size-2 shrink-0 rounded-full", n.readAt ? "bg-transparent" : "bg-brand")} aria-hidden />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <StatusBadge label={NOTIFICATION_TYPE_LABELS[n.type]} tone={n.type === "OVERDUE" || n.type === "MARGIN_BELOW_THRESHOLD" ? "danger" : n.type === "MISSING_COST" || n.type === "DEADLINE_SOON" ? "warning" : "info"} />
+                      <StatusBadge label={tr(NOTIFICATION_TYPE_LABELS[n.type])} tone={n.type === "OVERDUE" || n.type === "MARGIN_BELOW_THRESHOLD" ? "danger" : n.type === "MISSING_COST" || n.type === "DEADLINE_SOON" ? "warning" : "info"} />
                       <span className="text-xs text-faint">{formatDateTime(n.createdAt, settings.timezone)}</span>
-                      {!n.readAt ? <span className="sr-only">non lue</span> : null}
+                      {!n.readAt ? <span className="sr-only">{tr("non lue")}</span> : null}
                     </div>
-                    {n.link ? <Link href={n.link} className="mt-1 block font-medium hover:text-brand">{n.title}</Link> : <p className="mt-1 font-medium">{n.title}</p>}
-                    {n.body ? <p className="text-xs text-subtle">{n.body}</p> : null}
+                    {n.link ? <Link href={n.link} className="mt-1 block font-medium hover:text-brand">{tr(n.title)}</Link> : <p className="mt-1 font-medium">{tr(n.title)}</p>}
+                    {n.body ? <p className="text-xs text-subtle">{tr(n.body)}</p> : null}
                   </div>
-                  {!n.readAt ? <ActionButton size="xs" variant="ghost" action={markNotificationsReadAction.bind(null, [n.id])}>Lu</ActionButton> : null}
+                  {!n.readAt ? <ActionButton size="xs" variant="ghost" action={markNotificationsReadAction.bind(null, [n.id])}>{tr("Lu")}</ActionButton> : null}
                 </li>
               ))}
             </ul>
           )}
         </Section>
-        <Section title="Préférences" description="Désactiver un type stoppe les nouvelles notifications de ce type pour vous.">
+        <Section title={tr("Préférences")} description={tr("Désactiver un type stoppe les nouvelles notifications de ce type pour vous.")}>
           <ul className="flex flex-col gap-2">
             {(Object.keys(NOTIFICATION_TYPE_LABELS) as NotificationType[]).map((t) => (
               <li key={t} className="flex items-center justify-between gap-2 text-sm">
-                <span>{NOTIFICATION_TYPE_LABELS[t]}</span>
+                <span>{tr(NOTIFICATION_TYPE_LABELS[t])}</span>
                 <ActionButton size="xs" variant={disabled.has(t) ? "outline" : "ghost"} action={setNotificationPreferenceAction.bind(null, t, disabled.has(t))}>
-                  {disabled.has(t) ? "Désactivée — réactiver" : "Activée — couper"}
+                  {disabled.has(t) ? tr("Désactivée — réactiver") : tr("Activée — couper")}
                 </ActionButton>
               </li>
             ))}

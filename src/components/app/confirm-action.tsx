@@ -16,6 +16,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { ActionResult } from "@/lib/action-result";
 import { useAction } from "./use-action";
+import { useT } from "#i18n";
+import { trNode } from "@/lib/i18n/translate";
 
 /** Bouton + dialogue de confirmation, avec motif facultatif ou obligatoire. */
 export function ConfirmAction({
@@ -39,6 +41,7 @@ export function ConfirmAction({
   action: (reason: string) => Promise<ActionResult<unknown>>;
   onDone?: () => void;
 }) {
+  const tr = useT();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const { pending, run } = useAction();
@@ -49,22 +52,21 @@ export function ConfirmAction({
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          {description ? <DialogDescription asChild><div>{description}</div></DialogDescription> : null}
+          <DialogTitle>{tr(title)}</DialogTitle>
+          {description ? <DialogDescription asChild><div>{trNode(tr, description)}</div></DialogDescription> : null}
         </DialogHeader>
         {reason !== "none" ? (
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="confirm-reason" className="text-xs font-semibold text-subtle">
-              {reasonLabel}
-              {reason === "required" ? <span className="text-brand"> *</span> : " (facultatif)"}
+              {tr(reasonLabel)}
+              {reason === "required" ? <span className="text-brand"> *</span> : tr(" (facultatif)")}
             </Label>
             <Textarea id="confirm-reason" value={text} onChange={(e) => setText(e.target.value)} rows={3} />
           </div>
         ) : null}
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
-            Annuler
-          </Button>
+            {tr("Annuler")}</Button>
           <Button
             variant={destructive ? "destructive" : "default"}
             disabled={pending || missingReason}
@@ -79,7 +81,7 @@ export function ConfirmAction({
             }
           >
             {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-            {confirmLabel}
+            {tr(confirmLabel)}
           </Button>
         </DialogFooter>
       </DialogContent>

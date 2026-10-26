@@ -6,10 +6,15 @@ import { requirePagePermission } from "@/server/auth/session";
 import { prisma } from "@/server/db";
 import { invoiceFormData } from "@/server/queries/finance-forms";
 import { agencyToday } from "@/server/services/common";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Enregistrer une facture" };
+export async function generateMetadata(): Promise<Metadata> {
+  const tr = await getT();
+  return { title: tr("Enregistrer une facture") };
+}
 
 export default async function NewInvoicePage(props: PageProps<"/finances/factures/nouvelle">) {
+  const tr = await getT();
   await requirePagePermission("invoices.write");
   const params = await props.searchParams;
   const [data, today] = await Promise.all([invoiceFormData(), agencyToday()]);
@@ -17,7 +22,7 @@ export default async function NewInvoicePage(props: PageProps<"/finances/facture
   const order = typeof params.vente === "string" ? await prisma.salesOrder.findUnique({ where: { id: params.vente }, include: { lines: true } }) : null;
   return (
     <div className="mx-auto max-w-5xl">
-      <PageHeader title="Enregistrer une facture" subtitle="Factures d'acompte et finales : la finale déduit l'acompte, le revenu n'est jamais compté deux fois." />
+      <PageHeader title={tr("Enregistrer une facture")} subtitle={tr("Factures d'acompte et finales : la finale déduit l'acompte, le revenu n'est jamais compté deux fois.")} />
       <InvoiceForm
         {...data}
         defaults={{

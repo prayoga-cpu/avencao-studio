@@ -1,6 +1,8 @@
 import * as React from "react";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { useT } from "#i18n";
+import { trNode } from "@/lib/i18n/translate";
 
 /** Champ de formulaire accessible : libellé, aide et message d'erreur reliés au contrôle. */
 export function Field({
@@ -20,12 +22,13 @@ export function Field({
   children: React.ReactNode;
   className?: string;
 }) {
+  const tr = useT();
   const hintId = hint ? `${htmlFor}-hint` : undefined;
   const errorId = error ? `${htmlFor}-error` : undefined;
   return (
     <div className={cn("flex min-w-0 flex-col gap-1.5", className)}>
       <Label htmlFor={htmlFor} className="text-xs font-semibold text-subtle">
-        {label}
+        {tr(label)}
         {required ? <span className="text-brand" aria-hidden> *</span> : null}
       </Label>
       {React.isValidElement(children)
@@ -38,12 +41,12 @@ export function Field({
         : children}
       {hint ? (
         <p id={hintId} className="text-xs text-faint">
-          {hint}
+          {trNode(tr, hint)}
         </p>
       ) : null}
       {error ? (
         <p id={errorId} role="alert" className="text-xs font-medium text-danger">
-          {error}
+          {tr(error)}
         </p>
       ) : null}
     </div>

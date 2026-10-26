@@ -6,10 +6,15 @@ import { toDateOnlyString } from "@/lib/dates";
 import { requirePagePermission } from "@/server/auth/session";
 import { prisma } from "@/server/db";
 import { clientOptions, staffOptions } from "@/server/queries/options";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Modifier le projet" };
+export async function generateMetadata(): Promise<Metadata> {
+  const tr = await getT();
+  return { title: tr("Modifier le projet") };
+}
 
 export default async function EditProjectPage(props: PageProps<"/projets/[id]/modifier">) {
+  const tr = await getT();
   await requirePagePermission("projects.write");
   const { id } = await props.params;
   const [p, clients, owners] = await Promise.all([prisma.project.findUnique({ where: { id } }), clientOptions(), staffOptions()]);
@@ -17,7 +22,7 @@ export default async function EditProjectPage(props: PageProps<"/projets/[id]/mo
   const d = (v: Date | null) => (v ? toDateOnlyString(v) : "");
   return (
     <div className="mx-auto max-w-4xl">
-      <PageHeader title={`Modifier — ${p.reference}`} subtitle="Un changement de deadline client est consigné (ancienne et nouvelle date)." />
+      <PageHeader title={tr("Modifier — {0}", [p.reference])} subtitle={tr("Un changement de deadline client est consigné (ancienne et nouvelle date).")} />
       <ProjectForm
         projectId={p.id}
         clients={clients}

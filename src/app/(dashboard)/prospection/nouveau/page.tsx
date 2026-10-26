@@ -4,10 +4,15 @@ import { OpportunityForm } from "@/features/prospection/opportunity-form";
 import { requirePagePermission } from "@/server/auth/session";
 import { prisma } from "@/server/db";
 import { staffOptions } from "@/server/queries/options";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Nouvelle opportunité" };
+export async function generateMetadata(): Promise<Metadata> {
+  const tr = await getT();
+  return { title: tr("Nouvelle opportunité") };
+}
 
 export default async function NewOpportunityPage(props: PageProps<"/prospection/nouveau">) {
+  const tr = await getT();
   const actor = await requirePagePermission("prospection.write");
   const params = await props.searchParams;
   const [clients, owners] = await Promise.all([
@@ -16,7 +21,7 @@ export default async function NewOpportunityPage(props: PageProps<"/prospection/
   ]);
   return (
     <div className="mx-auto max-w-4xl">
-      <PageHeader title="Nouvelle opportunité" subtitle="Un client peut avoir plusieurs opportunités en parallèle." />
+      <PageHeader title={tr("Nouvelle opportunité")} subtitle={tr("Un client peut avoir plusieurs opportunités en parallèle.")} />
       <OpportunityForm
         clients={clients.map((c) => ({ value: c.id, label: c.displayName }))}
         owners={owners}

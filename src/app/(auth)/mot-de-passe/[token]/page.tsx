@@ -5,28 +5,31 @@ import { Notice } from "@/components/app/notice";
 import { findValidToken } from "@/server/users";
 import { AuthCard } from "../../auth-card";
 import { SetPasswordForm } from "./set-password-form";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Définir mon mot de passe" };
+export async function generateMetadata(): Promise<Metadata> {
+  const tr = await getT();
+  return { title: tr("Définir mon mot de passe") };
+}
 
 async function TokenGate({ params }: { params: Promise<{ token: string }> }) {
+  const tr = await getT();
   const { token } = await params;
   const row = await findValidToken(token);
   if (!row) {
     return (
-      <AuthCard title="Lien invalide ou expiré">
+      <AuthCard title={tr("Lien invalide ou expiré")}>
         <Notice tone="warning">
-          Ce lien n&apos;est plus valable (déjà utilisé, expiré ou révoqué). Demandez un nouveau lien à un administrateur.
-        </Notice>
+          {tr("Ce lien n'est plus valable (déjà utilisé, expiré ou révoqué). Demandez un nouveau lien à un administrateur.")}</Notice>
         <Link href="/connexion" className="mt-4 block text-center text-sm text-brand hover:underline">
-          Retour à la connexion
-        </Link>
+          {tr("Retour à la connexion")}</Link>
       </AuthCard>
     );
   }
   return (
     <AuthCard
-      title={row.purpose === "INVITE" ? "Bienvenue sur Avencao" : "Nouveau mot de passe"}
-      subtitle={`Compte : ${row.user.email}`}
+      title={row.purpose === "INVITE" ? tr("Bienvenue sur Avencao") : tr("Nouveau mot de passe")}
+      subtitle={tr("Compte : {0}", [row.user.email])}
     >
       <SetPasswordForm token={token} />
     </AuthCard>

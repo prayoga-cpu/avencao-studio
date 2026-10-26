@@ -22,6 +22,12 @@
     "check:env": "tsx scripts/check-env.ts",
     "smoke": "tsx scripts/smoke.ts"
   },
+  "imports": {
+    "#i18n": {
+      "react-server": "./src/lib/i18n/runtime.server.ts",
+      "default": "./src/lib/i18n/runtime.client.ts"
+    }
+  },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1156.0",
     "@aws-sdk/s3-request-presigner": "3.1156.0",

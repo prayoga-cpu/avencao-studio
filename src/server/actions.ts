@@ -2,6 +2,8 @@ import "server-only";
 import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 import { ConflictError, DomainError, ForbiddenError, NotFoundError, UnauthenticatedError } from "./errors";
+import { getLocale } from "@/lib/i18n/server";
+import { translateMessage } from "@/lib/i18n/translate";
 
 import type { ActionResult } from "@/lib/action-result";
 export type { ActionResult };
@@ -13,11 +15,22 @@ export type { ActionResult };
 export async function safeAction<T>(handler: () => Promise<T>, successMessage?: string): Promise<ActionResult<T>> {
   try {
     const data = await handler();
-    return { ok: true, data, message: successMessage };
+    return localize({ ok: true, data, message: successMessage });
   } catch (error) {
     unstable_rethrow(error);
-    return toActionError(error);
+    return localize(toActionError(error));
   }
+}
+
+/** Messages (succès, erreurs métier, erreurs de champ) dans la langue de l'utilisateur. */
+async function localize<R extends ActionResult<unknown> | ReturnType<typeof toActionError>>(result: R): Promise<R> {
+  const locale = await getLocale();
+  if (locale === "fr") return result;
+  if (result.ok) return { ...result, message: result.message ? translateMessage(locale, result.message) : result.message };
+  const fieldErrors = result.fieldErrors
+    ? Object.fromEntries(Object.entries(result.fieldErrors).map(([k, v]) => [k, v?.map((m) => translateMessage(locale, m))]))
+    : undefined;
+  return { ...result, error: translateMessage(locale, result.error), fieldErrors };
 }
 
 export function toActionError(error: unknown): { ok: false; error: string; fieldErrors?: Record<string, string[] | undefined> } {

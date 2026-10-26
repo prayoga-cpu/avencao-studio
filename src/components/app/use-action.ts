@@ -4,10 +4,12 @@ import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
 import type { ActionResult } from "@/lib/action-result";
+import { useT } from "#i18n";
 
 /** Exécute une Server Action avec état de chargement, retour clair et rafraîchissement. */
 export function useAction() {
   const router = useRouter();
+  const tr = useT();
   const [pending, startTransition] = useTransition();
 
   function run<T>(
@@ -19,15 +21,15 @@ export function useAction() {
         const result = await fn();
         if (result.ok) {
           const msg = result.message ?? options.successMessage;
-          if (msg) toast.success(msg);
+          if (msg) toast.success(tr(msg));
           options.onSuccess?.(result.data);
           if (options.refresh !== false) router.refresh();
         } else {
-          toast.error(result.error);
+          toast.error(tr(result.error));
           options.onError?.(result);
         }
       } catch {
-        toast.error("Connexion au serveur impossible. Vérifiez votre réseau puis réessayez.");
+        toast.error(tr("Connexion au serveur impossible. Vérifiez votre réseau puis réessayez."));
       }
     });
   }

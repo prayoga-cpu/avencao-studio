@@ -6,6 +6,7 @@ import { Loader2, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "./field";
+import { useT } from "#i18n";
 
 export interface FilterDef {
   name: string;
@@ -26,6 +27,7 @@ export function FilterBar({
   showSearch?: boolean;
   children?: React.ReactNode;
 }) {
+  const tr = useT();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -69,15 +71,15 @@ export function FilterBar({
       {filters.map((f) => (
         <NativeSelect
           key={f.name}
-          aria-label={f.label}
+          aria-label={tr(f.label)}
           className="sm:w-auto sm:min-w-40"
           value={params.get(f.name) ?? ""}
           onChange={(e) => update({ [f.name]: e.target.value || null })}
         >
-          <option value="">{f.allLabel ?? `${f.label} : tous`}</option>
+          <option value="">{f.allLabel ?? tr("{0} : tous", [f.label])}</option>
           {f.options.map((o) => (
             <option key={o.value} value={o.value}>
-              {o.label}
+              {tr(o.label)}
             </option>
           ))}
         </NativeSelect>
@@ -94,10 +96,9 @@ export function FilterBar({
             startTransition(() => router.replace(`${pathname}${sp.size ? `?${sp.toString()}` : ""}`, { scroll: false }));
           }}
         >
-          <X aria-hidden /> Réinitialiser
-        </Button>
+          <X aria-hidden /> {" "}{tr("Réinitialiser")}</Button>
       ) : null}
-      {pending ? <Loader2 className="size-4 animate-spin text-subtle" aria-label="Chargement" /> : null}
+      {pending ? <Loader2 className="size-4 animate-spin text-subtle" aria-label={tr("Chargement")} /> : null}
     </div>
   );
 }

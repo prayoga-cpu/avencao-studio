@@ -49,8 +49,12 @@ import { editorOptions } from "@/server/queries/options";
 import { getVideoDetail } from "@/server/queries/production";
 import { agencyToday } from "@/server/services/common";
 import { getSettings } from "@/server/settings";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Vidéo" };
+export async function generateMetadata(): Promise<Metadata> {
+  const tr = await getT();
+  return { title: tr("Vidéo") };
+}
 
 const TABS = [
   { value: "production", label: "Production" },
@@ -62,6 +66,7 @@ const TABS = [
 ];
 
 export default async function VideoPage(props: PageProps<"/videos/[id]">) {
+  const tr = await getT();
   const actor = await requirePagePermission("videos.readAll");
   const { id } = await props.params;
   const params = await props.searchParams;
@@ -82,9 +87,9 @@ export default async function VideoPage(props: PageProps<"/videos/[id]">) {
       to,
       requiresReason: !!rule.requiresReason || deliveryException,
       hint: deliveryException
-        ? `Livraison sans ${[!hasFinal ? "lien/document final" : null, !hasApproval ? "validation enregistrée" : null].filter(Boolean).join(" ni ")} : exception du responsable, motif obligatoire.`
+        ? tr("Livraison sans {0} : exception du responsable, motif obligatoire.", [[!hasFinal ? "lien/document final" : null, !hasApproval ? "validation enregistrée" : null].filter(Boolean).join(" ni ")])
         : rule.isReopen
-          ? "Réouverture après validation/livraison : tracée dans l'historique."
+          ? tr("Réouverture après validation/livraison : tracée dans l'historique.")
           : undefined,
     };
   });
@@ -99,28 +104,28 @@ export default async function VideoPage(props: PageProps<"/videos/[id]">) {
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
             <StatusBadge {...VIDEO_STATUS[v.status]} />
-            {v.isBlocked ? <StatusBadge label={`Bloquée : ${v.blockedReason ?? ""}`} tone="danger" /> : null}
+            {v.isBlocked ? <StatusBadge label={tr("Bloquée : {0}", [v.blockedReason ?? ""])} tone="danger" /> : null}
             <StatusBadge {...PRIORITY[v.priority]} />
-            <span>{VIDEO_TYPE_LABELS[v.type]}</span>
+            <span>{tr(VIDEO_TYPE_LABELS[v.type])}</span>
             <span>·</span>
             <Link href={`/clients/${v.project.client.id}`} className="hover:text-brand">{v.project.client.displayName}</Link>
             <span>·</span>
             <Link href={`/projets/${v.project.id}`} className="hover:text-brand">{v.project.reference}</Link>
-            <span className={overdue ? "font-semibold text-danger" : undefined}>· Deadline client {formatDateOnly(v.clientDeadline)}{overdue ? " (en retard)" : ""}</span>
+            <span className={overdue ? "font-semibold text-danger" : undefined}>{tr("· Deadline client")}{" "}{formatDateOnly(v.clientDeadline)}{overdue ? tr(" (en retard)") : ""}</span>
           </span>
         }
         actions={
           canWrite ? (
             <>
               <BlockToggle videoId={v.id} isBlocked={v.isBlocked} reason={v.blockedReason} />
-              <Button asChild size="sm" variant="outline"><Link href={`/videos/${v.id}/modifier`}><Pencil aria-hidden /> Modifier</Link></Button>
+              <Button asChild size="sm" variant="outline"><Link href={`/videos/${v.id}/modifier`}><Pencil aria-hidden /> {" "}{tr("Modifier")}</Link></Button>
             </>
           ) : null
         }
       >
         {canWrite ? (
           <div className="rounded-xl border border-brand-border bg-black/30 p-3">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle">Faire avancer la vidéo</p>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle">{tr("Faire avancer la vidéo")}</p>
             <WorkflowActions videoId={v.id} options={transitions} hasRevenue={(allocations?.length ?? 0) > 0} />
           </div>
         ) : null}
@@ -131,8 +136,8 @@ export default async function VideoPage(props: PageProps<"/videos/[id]">) {
       {tab === "brief" ? BriefTab() : null}
       {tab === "versions" ? VersionsTab() : null}
       {tab === "qualite" ? (
-        <Section title="Checklist qualité" description="Respect du brief, orthographe, sous-titres, son, cadrage, format, export…">
-          <Checklist canCheck={canWrite} items={v.checklist.map((c) => ({ id: c.id, label: c.label, checked: c.checked, checkedBy: c.checkedById ? (names[c.checkedById] ?? null) : null }))} />
+        <Section title={tr("Checklist qualité")} description={tr("Respect du brief, orthographe, sous-titres, son, cadrage, format, export…")}>
+          <Checklist canCheck={canWrite} items={v.checklist.map((c) => ({ id: c.id, label: tr(c.label), checked: c.checked, checkedBy: c.checkedById ? (names[c.checkedById] ?? null) : null }))} />
         </Section>
       ) : null}
       {tab === "finances" ? FinanceTab() : null}
@@ -160,7 +165,7 @@ export default async function VideoPage(props: PageProps<"/videos/[id]">) {
       payCurrency: e.payCurrency,
       rateCards: e.rateCards
         .filter((r) => !r.videoType || r.videoType === v.type)
-        .map((r) => ({ id: r.id, label: r.label, mode: r.mode, unitPrice: showRates ? r.unitPrice.toFixed(2) : null, currency: r.currency, videoType: r.videoType })),
+        .map((r) => ({ id: r.id, label: tr(r.label), mode: r.mode, unitPrice: showRates ? r.unitPrice.toFixed(2) : null, currency: r.currency, videoType: r.videoType })),
     }));
     const showCosts = can(actor, "costs.read");
     const totalHours = sum(v.timeEntries.map((t) => dec(t.minutes))).div(60);
@@ -168,12 +173,12 @@ export default async function VideoPage(props: PageProps<"/videos/[id]">) {
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
         <div className="flex flex-col gap-5 xl:col-span-2">
           <Section
-            title="Missions"
-            description="Plusieurs prestataires peuvent contribuer (dérushage, montage, motion…). Chaque mission porte son tarif figé."
+            title={tr("Missions")}
+            description={tr("Plusieurs prestataires peuvent contribuer (dérushage, montage, motion…). Chaque mission porte son tarif figé.")}
             actions={canWrite ? <AssignDialog videoId={v.id} internalDeadline={v.internalDeadline ? toDateOnlyString(v.internalDeadline) : ""} estimatedHours={v.estimatedHours?.toFixed() ?? ""} editors={editorChoices} canSetPrice={can(actor, "costs.write")} /> : null}
           >
             {v.assignments.length === 0 ? (
-              <p className="text-sm text-subtle">Aucun prestataire affecté.</p>
+              <p className="text-sm text-subtle">{tr("Aucun prestataire affecté.")}</p>
             ) : (
               <ul className="flex flex-col gap-3">
                 {v.assignments.map((a) => {
@@ -185,15 +190,15 @@ export default async function VideoPage(props: PageProps<"/videos/[id]">) {
                         <div>
                           <p className="font-semibold">
                             <Link href={`/monteurs/${a.editor.id}`} className="hover:text-brand">{a.editor.displayName}</Link>
-                            <span className="ml-2 text-sm font-normal text-subtle">{ASSIGNMENT_ROLE_LABELS[a.role]}{a.isPrimary ? " · principale" : ""}</span>
+                            <span className="ml-2 text-sm font-normal text-subtle">{tr(ASSIGNMENT_ROLE_LABELS[a.role])}{a.isPrimary ? tr(" · principale") : ""}</span>
                           </p>
                           <p className="mt-0.5 text-xs text-subtle">
-                            Échéance {formatDateOnly(a.dueOn)} · {formatHours(a.estimatedHours?.toFixed() ?? null)}
+                            {tr("Échéance")}{" "}{formatDateOnly(a.dueOn)} · {formatHours(a.estimatedHours?.toFixed() ?? null)}
                             {a.scope ? ` · ${a.scope}` : ""}
                           </p>
                           {showCosts ? (
                             <p className="mt-0.5 text-xs text-subtle">
-                              Tarif figé : {a.rateMode ? `${RATE_MODE_LABELS[a.rateMode]} · ${a.unitPrice?.toFixed(2) ?? "?"} ${a.currency ?? ""} × ${a.quantity.toFixed()}` : "aucun"}
+                              {tr("Tarif figé :")}{" "}{a.rateMode ? `${tr(RATE_MODE_LABELS[a.rateMode])} · ${a.unitPrice?.toFixed(2) ?? "?"} ${a.currency ?? ""} × ${a.quantity.toFixed()}` : tr("aucun")}
                             </p>
                           ) : null}
                         </div>
@@ -201,29 +206,29 @@ export default async function VideoPage(props: PageProps<"/videos/[id]">) {
                       </div>
                       {showCosts && cost ? (
                         <div className="mt-2 flex flex-wrap items-center gap-3 rounded-lg bg-surface-2/60 px-2.5 py-2 text-sm">
-                          <span>Coût : <Money value={cost.amount?.toFixed(2) ?? null} currency={cost.currency as CurrencyCode} /></span>
+                          <span>{tr("Coût :")}{" "}<Money value={cost.amount?.toFixed(2) ?? null} currency={cost.currency as CurrencyCode} /></span>
                           <StatusBadge {...COST_STAGE[cost.stage]} />
-                          {cost.currency !== "EUR" && cost.amountEur ? <span className="text-xs text-subtle">≈ <Money value={cost.amountEur.toFixed(2)} /> (taux {cost.fxUnitsPerEur?.toFixed()} {cost.fxSource === "MANUAL" ? "manuel" : ""})</span> : null}
-                          <span className="text-xs text-subtle">Payé : <Money value={paid.toFixed(2)} currency={cost.currency as CurrencyCode} /></span>
+                          {cost.currency !== "EUR" && cost.amountEur ? <span className="text-xs text-subtle">≈ <Money value={cost.amountEur.toFixed(2)} /> {" "}{tr("(taux")}{" "}{cost.fxUnitsPerEur?.toFixed()} {cost.fxSource === "MANUAL" ? tr("manuel") : ""})</span> : null}
+                          <span className="text-xs text-subtle">{tr("Payé :")}{" "}<Money value={paid.toFixed(2)} currency={cost.currency as CurrencyCode} /></span>
                           {can(actor, "costs.write") && cost.stage !== "CANCELLED" && paid.isZero() ? (
-                            <CostAmountDialog costId={cost.id} currency={cost.currency} current={cost.amount?.toFixed(2) ?? null} label={cost.label} validated={cost.stage === "VALIDATED"} />
+                            <CostAmountDialog costId={cost.id} currency={cost.currency} current={cost.amount?.toFixed(2) ?? null} label={tr(cost.label)} validated={cost.stage === "VALIDATED"} />
                           ) : null}
                         </div>
                       ) : a.rateMode === "MONTHLY_ENVELOPE" ? (
-                        <p className="mt-2 text-xs text-subtle">Couverte par l&apos;enveloppe mensuelle du prestataire (allocation analytique dans Finances › Coûts).</p>
+                        <p className="mt-2 text-xs text-subtle">{tr("Couverte par l'enveloppe mensuelle du prestataire (allocation analytique dans Finances › Coûts).")}</p>
                       ) : null}
                       {canWrite && a.status !== "CANCELLED" && a.status !== "APPROVED" ? (
                         <div className="mt-2 flex flex-wrap gap-2">
                           {can(actor, "videos.validate") ? (
-                            <ActionButton size="xs" action={validateAssignmentAction.bind(null, a.id)}>Valider la mission</ActionButton>
+                            <ActionButton size="xs" action={validateAssignmentAction.bind(null, a.id)}>{tr("Valider la mission")}</ActionButton>
                           ) : null}
                           <ConfirmAction
-                            trigger={<Button size="xs" variant="ghost">Annuler la mission</Button>}
-                            title="Annuler la mission"
-                            description="Un coût déjà engagé ou validé reste dû au prestataire. Seul un coût encore estimé est annulé."
+                            trigger={<Button size="xs" variant="ghost">{tr("Annuler la mission")}</Button>}
+                            title={tr("Annuler la mission")}
+                            description={tr("Un coût déjà engagé ou validé reste dû au prestataire. Seul un coût encore estimé est annulé.")}
                             reason="required"
                             destructive
-                            confirmLabel="Annuler la mission"
+                            confirmLabel={tr("Annuler la mission")}
                             action={cancelAssignmentAction.bind(null, a.id)}
                           />
                         </div>
@@ -234,10 +239,10 @@ export default async function VideoPage(props: PageProps<"/videos/[id]">) {
               </ul>
             )}
           </Section>
-          <Section title="Liens" description="Rushs, documents, review Frame.io, export final.">
+          <Section title={tr("Liens")} description={tr("Rushs, documents, review Frame.io, export final.")}>
             <LinksPanel videoId={v.id} links={v.links} canManage={canWrite} />
           </Section>
-          <Section title="Demandes hors périmètre">
+          <Section title={tr("Demandes hors périmètre")}>
             <ChangeRequestsPanel
               videoId={v.id}
               canCreate={canWrite}
@@ -253,34 +258,34 @@ export default async function VideoPage(props: PageProps<"/videos/[id]">) {
           </Section>
         </div>
         <div className="flex flex-col gap-5">
-          <Section title="Repères">
+          <Section title={tr("Repères")}>
             <DefinitionList
               className="sm:grid-cols-1"
               items={[
-                { label: "Début prévu", value: formatDateOnly(v.plannedStartOn) },
-                { label: "Deadline interne", value: formatDateOnly(v.internalDeadline) },
-                { label: "Deadline client", value: formatDateOnly(v.clientDeadline) },
-                { label: "Durées (rushs / attendue / réelle)", value: `${formatDurationSeconds(v.rushDurationSec)} / ${formatDurationSeconds(v.expectedDurationSec)} / ${formatDurationSeconds(v.finalDurationSec)}` },
-                { label: "Heures estimées", value: formatHours(v.estimatedHours?.toFixed() ?? null) },
-                { label: "Heures saisies", value: `${totalHours.toFixed(1)} h` },
-                { label: "Allers-retours client", value: `${rounds.included} utilisé(s) sur ${includedRounds ?? "?"} inclus${rounds.internalErrors ? ` · ${rounds.internalErrors} erreur(s) interne(s)` : ""}${rounds.outOfScope ? ` · ${rounds.outOfScope} hors périmètre` : ""}` },
+                { label: tr("Début prévu"), value: formatDateOnly(v.plannedStartOn) },
+                { label: tr("Deadline interne"), value: formatDateOnly(v.internalDeadline) },
+                { label: tr("Deadline client"), value: formatDateOnly(v.clientDeadline) },
+                { label: tr("Durées (rushs / attendue / réelle)"), value: `${formatDurationSeconds(v.rushDurationSec)} / ${formatDurationSeconds(v.expectedDurationSec)} / ${formatDurationSeconds(v.finalDurationSec)}` },
+                { label: tr("Heures estimées"), value: formatHours(v.estimatedHours?.toFixed() ?? null) },
+                { label: tr("Heures saisies"), value: `${totalHours.toFixed(1)} h` },
+                { label: tr("Allers-retours client"), value: tr("{0} utilisé(s) sur {1} inclus{2}{3}", [rounds.included, includedRounds ?? "?", rounds.internalErrors ? tr(" · {0} erreur(s) interne(s)", [rounds.internalErrors]) : "", rounds.outOfScope ? tr(" · {0} hors périmètre", [rounds.outOfScope]) : ""]) },
               ]}
             />
             {includedRounds !== null && rounds.included > includedRounds ? (
-              <Notice tone="warning" className="mt-3">Allers-retours inclus dépassés : proposez un supplément (demande hors périmètre).</Notice>
+              <Notice tone="warning" className="mt-3">{tr("Allers-retours inclus dépassés : proposez un supplément (demande hors périmètre).")}</Notice>
             ) : null}
           </Section>
           {can(actor, "time.log") ? (
-            <Section title="Temps de travail" description="Distinct des durées médias.">
-              <TimeEntryForm videoId={v.id} today={today} canOwnerTime={actor.role === "ADMIN"} assignments={v.assignments.filter((a) => a.status !== "CANCELLED").map((a) => ({ id: a.id, label: `${a.editor.displayName} — ${ASSIGNMENT_ROLE_LABELS[a.role]}` }))} />
+            <Section title={tr("Temps de travail")} description={tr("Distinct des durées médias.")}>
+              <TimeEntryForm videoId={v.id} today={today} canOwnerTime={actor.role === "ADMIN"} assignments={v.assignments.filter((a) => a.status !== "CANCELLED").map((a) => ({ id: a.id, label: `${a.editor.displayName} — ${tr(ASSIGNMENT_ROLE_LABELS[a.role])}` }))} />
               <ul className="mt-3 flex flex-col gap-1 text-xs text-subtle">
                 {v.timeEntries.map((t) => (
-                  <li key={t.id}>{formatDateOnly(t.workedOn)} · {(t.minutes / 60).toFixed(2)} h · {t.user?.name ?? "—"}{t.isOwnerTime ? " (dirigeant)" : ""}{t.note ? ` — ${t.note}` : ""}</li>
+                  <li key={t.id}>{formatDateOnly(t.workedOn)} · {(t.minutes / 60).toFixed(2)} h · {t.user?.name ?? "—"}{t.isOwnerTime ? tr(" (dirigeant)") : ""}{t.note ? ` — ${t.note}` : ""}</li>
                 ))}
               </ul>
             </Section>
           ) : null}
-          <Section title="Documents finaux" description="Petits fichiers uniquement ; les masters restent dans vos outils.">
+          <Section title={tr("Documents finaux")} description={tr("Petits fichiers uniquement ; les masters restent dans vos outils.")}>
             <AttachmentsPanel items={finalDocs} ownerType="VIDEO" ownerId={v.id} canUpload={canWrite} timezone={settings.timezone} />
           </Section>
         </div>
@@ -290,20 +295,20 @@ export default async function VideoPage(props: PageProps<"/videos/[id]">) {
 
   function BriefTab() {
     return (
-      <Section title="Brief">
+      <Section title={tr("Brief")}>
         <DefinitionList
           items={[
-            { label: "Format / ratio", value: [v.format, v.ratio].filter(Boolean).join(" · ") || "—" },
-            { label: "Langue", value: v.language ?? "—" },
-            { label: "Brief", value: v.brief ? <span className="whitespace-pre-wrap">{v.brief}</span> : "—" },
-            { label: "Objectifs", value: v.objectives ? <span className="whitespace-pre-wrap">{v.objectives}</span> : "—" },
-            { label: "Audience", value: v.audience ?? "—" },
-            { label: "Références", value: v.references ? <span className="whitespace-pre-wrap break-words">{v.references}</span> : "—" },
-            { label: "Sous-titrage", value: v.subtitleStyle ?? "—" },
-            { label: "Contraintes de marque", value: v.brandConstraints ? <span className="whitespace-pre-wrap">{v.brandConstraints}</span> : "—" },
-            { label: "Instructions d'export", value: v.exportInstructions ? <span className="whitespace-pre-wrap">{v.exportInstructions}</span> : "—" },
-            { label: "Règle des allers-retours", value: v.project.revisionRoundDefinition ?? "—" },
-            { label: "Erreurs de production", value: v.project.productionErrorPolicy ?? "—" },
+            { label: tr("Format / ratio"), value: [v.format, v.ratio].filter(Boolean).join(" · ") || "—" },
+            { label: tr("Langue"), value: v.language ?? "—" },
+            { label: tr("Brief"), value: v.brief ? <span className="whitespace-pre-wrap">{v.brief}</span> : "—" },
+            { label: tr("Objectifs"), value: v.objectives ? <span className="whitespace-pre-wrap">{v.objectives}</span> : "—" },
+            { label: tr("Audience"), value: v.audience ?? "—" },
+            { label: tr("Références"), value: v.references ? <span className="whitespace-pre-wrap break-words">{v.references}</span> : "—" },
+            { label: tr("Sous-titrage"), value: v.subtitleStyle ?? "—" },
+            { label: tr("Contraintes de marque"), value: v.brandConstraints ? <span className="whitespace-pre-wrap">{v.brandConstraints}</span> : "—" },
+            { label: tr("Instructions d'export"), value: v.exportInstructions ? <span className="whitespace-pre-wrap">{v.exportInstructions}</span> : "—" },
+            { label: tr("Règle des allers-retours"), value: v.project.revisionRoundDefinition ?? "—" },
+            { label: tr("Erreurs de production"), value: v.project.productionErrorPolicy ?? "—" },
           ]}
         />
       </Section>
@@ -314,7 +319,7 @@ export default async function VideoPage(props: PageProps<"/videos/[id]">) {
     const versionNumbers = Object.fromEntries(v.versions.map((x) => [x.id, x.number]));
     return (
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <Section title="Versions" description="V1, V2, V3… Les versions précédentes sont conservées. Lecteur et annotations : dans Frame.io.">
+        <Section title={tr("Versions")} description={tr("V1, V2, V3… Les versions précédentes sont conservées. Lecteur et annotations : dans Frame.io.")}>
           {canWrite && !["DELIVERED", "ARCHIVED", "CANCELLED"].includes(v.status) ? (
             <div className="mb-4"><SubmitVersionForm videoId={v.id} nextNumber={(v.versions[0]?.number ?? 0) + 1} /></div>
           ) : null}
@@ -325,7 +330,7 @@ export default async function VideoPage(props: PageProps<"/videos/[id]">) {
             versions={v.versions.map((x) => ({ id: x.id, number: x.number, url: x.url, description: x.description, status: x.status, createdAt: x.createdAt, decisionNote: x.decisionNote, author: x.authorId ? names[x.authorId] : null }))}
           />
         </Section>
-        <Section title="Retours" description="Visibilité interne ou monteur ; nature : inclus, erreur interne ou hors périmètre.">
+        <Section title={tr("Retours")} description={tr("Visibilité interne ou monteur ; nature : inclus, erreur interne ou hors périmètre.")}>
           {can(actor, "videos.validate") ? <div className="mb-4"><FeedbackForm videoId={v.id} versions={v.versions.map((x) => ({ id: x.id, number: x.number }))} /></div> : null}
           <FeedbackList
             canResolve={canWrite}
@@ -342,24 +347,24 @@ export default async function VideoPage(props: PageProps<"/videos/[id]">) {
     return (
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
         {finance ? (
-          <Section title="Marge directe de la vidéo" className="xl:col-span-1">
+          <Section title={tr("Marge directe de la vidéo")} className="xl:col-span-1">
             <DefinitionList
               className="sm:grid-cols-1"
               items={[
-                { label: "Revenu alloué (analytique)", value: <Money value={finance.revenueEur.toFixed(2)} /> },
-                { label: "Coûts directs", value: <Money value={finance.costsEur.toFixed(2)} /> },
-                { label: MARGIN_STATUS_LABELS[finance.status], value: <span className="text-lg font-bold"><Money value={finance.marginEur.toFixed(2)} colorize /> · <Percent value={finance.ratePct?.toFixed(2) ?? null} /></span> },
-                ...(finance.missingCostCount ? [{ label: "Complétude", value: <span className="text-warning">{finance.missingCostCount} coût(s) à renseigner — marge provisoire</span> }] : []),
+                { label: tr("Revenu alloué (analytique)"), value: <Money value={finance.revenueEur.toFixed(2)} /> },
+                { label: tr("Coûts directs"), value: <Money value={finance.costsEur.toFixed(2)} /> },
+                { label: tr(MARGIN_STATUS_LABELS[finance.status]), value: <span className="text-lg font-bold"><Money value={finance.marginEur.toFixed(2)} colorize /> · <Percent value={finance.ratePct?.toFixed(2) ?? null} /></span> },
+                ...(finance.missingCostCount ? [{ label: tr("Complétude"), value: <span className="text-warning">{finance.missingCostCount} {" "}{tr("coût(s) à renseigner — marge provisoire")}</span> }] : []),
               ]}
             />
-            <p className="mt-3 text-xs text-faint">Un encaissement ne modifie pas cette marge contractuelle ; il change le reçu et le restant dû de la facture.</p>
+            <p className="mt-3 text-xs text-faint">{tr("Un encaissement ne modifie pas cette marge contractuelle ; il change le reçu et le restant dû de la facture.")}</p>
           </Section>
         ) : null}
         <div className="flex flex-col gap-5 xl:col-span-2">
           {allocations ? (
-            <Section title="Revenu alloué" description="Répartition interne des ventes entre livrables. Jamais additionnée au prix du pack.">
+            <Section title={tr("Revenu alloué")} description={tr("Répartition interne des ventes entre livrables. Jamais additionnée au prix du pack.")}>
               {allocations.length === 0 ? (
-                <p className="text-sm text-subtle">Aucune vente allouée à cette vidéo.</p>
+                <p className="text-sm text-subtle">{tr("Aucune vente allouée à cette vidéo.")}</p>
               ) : (
                 <ul className="flex flex-col gap-1.5 text-sm">
                   {allocations.map((a) => (
@@ -373,14 +378,14 @@ export default async function VideoPage(props: PageProps<"/videos/[id]">) {
             </Section>
           ) : null}
           {otherCosts ? (
-            <Section title="Autres coûts directs" description="Achats, suppléments, coûts additionnels rattachés à cette vidéo." actions={can(actor, "costs.write") ? <Button asChild size="sm" variant="outline"><Link href={`/finances/couts/nouveau?video=${v.id}`}>Ajouter un coût</Link></Button> : null}>
+            <Section title={tr("Autres coûts directs")} description={tr("Achats, suppléments, coûts additionnels rattachés à cette vidéo.")} actions={can(actor, "costs.write") ? <Button asChild size="sm" variant="outline"><Link href={`/finances/couts/nouveau?video=${v.id}`}>{tr("Ajouter un coût")}</Link></Button> : null}>
               {otherCosts.length === 0 ? (
-                <p className="text-sm text-subtle">Aucun autre coût.</p>
+                <p className="text-sm text-subtle">{tr("Aucun autre coût.")}</p>
               ) : (
                 <ul className="flex flex-col gap-1.5 text-sm">
                   {otherCosts.map((c) => (
                     <li key={c.id} className="flex flex-wrap items-center justify-between gap-2">
-                      <span>{c.label} <span className="text-xs text-subtle">({COST_KIND_LABELS[c.kind]})</span></span>
+                      <span>{tr(c.label)} <span className="text-xs text-subtle">({tr(COST_KIND_LABELS[c.kind])})</span></span>
                       <span className="flex items-center gap-2"><StatusBadge {...COST_STAGE[c.stage]} /><Money value={c.amount?.toFixed(2) ?? null} currency={c.currency as CurrencyCode} /></span>
                     </li>
                   ))}
@@ -396,35 +401,35 @@ export default async function VideoPage(props: PageProps<"/videos/[id]">) {
   async function HistoryTab() {
     return (
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <Section title="Étapes">
+        <Section title={tr("Étapes")}>
           <ol className="flex flex-col gap-2 text-sm">
             {v.statusEvents.map((e) => (
               <li key={e.id}>
-                <span className="text-xs text-faint">{formatDateTime(e.createdAt, settings.timezone)} · {e.actorId ? names[e.actorId] ?? "—" : "Système"}</span>
+                <span className="text-xs text-faint">{formatDateTime(e.createdAt, settings.timezone)} · {e.actorId ? names[e.actorId] ?? "—" : tr("Système")}</span>
                 <p>
-                  {e.fromStatus ? VIDEO_STATUS[e.fromStatus].label : "Création"} → <strong>{VIDEO_STATUS[e.toStatus].label}</strong>
-                  {e.isOverride ? <StatusBadge className="ml-2" label="Exception" tone="warning" /> : null}
+                  {e.fromStatus ? tr(VIDEO_STATUS[e.fromStatus].label) : tr("Création")} → <strong>{tr(VIDEO_STATUS[e.toStatus].label)}</strong>
+                  {e.isOverride ? <StatusBadge className="ml-2" label={tr("Exception")} tone="warning" /> : null}
                 </p>
-                {e.reason ? <p className="text-xs text-subtle">Motif : {e.reason}</p> : null}
+                {e.reason ? <p className="text-xs text-subtle">{tr("Motif :")}{" "}{e.reason}</p> : null}
               </li>
             ))}
-            {v.statusEvents.length === 0 ? <li className="text-subtle">Aucun changement d&apos;étape.</li> : null}
+            {v.statusEvents.length === 0 ? <li className="text-subtle">{tr("Aucun changement d'étape.")}</li> : null}
           </ol>
         </Section>
         <div className="flex flex-col gap-5">
-          <Section title="Échéances déplacées">
+          <Section title={tr("Échéances déplacées")}>
             <ul className="flex flex-col gap-1.5 text-sm">
               {v.deadlineChanges.map((c) => (
                 <li key={c.id}>
                   <span className="text-xs text-faint">{formatDateTime(c.createdAt, settings.timezone)} · {c.actorId ? names[c.actorId] ?? "—" : "—"}</span>
-                  <p>{c.field === "VIDEO_CLIENT" ? "Client" : c.field === "VIDEO_INTERNAL" ? "Interne" : "Mission"} : {formatDateOnly(c.oldDate)} → {formatDateOnly(c.newDate)}{c.reason ? ` — ${c.reason}` : ""}</p>
+                  <p>{c.field === "VIDEO_CLIENT" ? tr("Client") : c.field === "VIDEO_INTERNAL" ? tr("Interne") : tr("Mission")} : {formatDateOnly(c.oldDate)} → {formatDateOnly(c.newDate)}{c.reason ? ` — ${c.reason}` : ""}</p>
                 </li>
               ))}
-              {v.deadlineChanges.length === 0 ? <li className="text-subtle">Aucun déplacement.</li> : null}
+              {v.deadlineChanges.length === 0 ? <li className="text-subtle">{tr("Aucun déplacement.")}</li> : null}
             </ul>
           </Section>
           {can(actor, "notes.internal") ? (
-            <Section title="Notes internes">
+            <Section title={tr("Notes internes")}>
               <NotesPanel notes={await getNotes(actor, { videoId: v.id })} target={{ videoId: v.id }} canAdminOnly={can(actor, "notes.adminOnly")} currentUserId={actor.id} isAdmin={actor.role === "ADMIN"} timezone={settings.timezone} />
             </Section>
           ) : null}

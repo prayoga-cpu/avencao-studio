@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { useT } from "#i18n";
+import { trNode } from "@/lib/i18n/translate";
 
 export interface Column<T> {
   key: string;
@@ -36,13 +38,14 @@ export function DataTable<T>({
   footer?: ReactNode;
   className?: string;
 }) {
-  if (rows.length === 0 && empty) return <>{empty}</>;
+  const tr = useT();
+  if (rows.length === 0 && empty) return <>{trNode(tr, empty)}</>;
   const [first, ...rest] = columns;
   return (
     <div className={className}>
       <div className="hidden overflow-x-auto rounded-xl border border-brand-border md:block av-scroll">
         <table className="w-full min-w-[640px] border-collapse text-sm">
-          {caption ? <caption className="sr-only">{caption}</caption> : null}
+          {caption ? <caption className="sr-only">{tr(caption)}</caption> : null}
           <thead>
             <tr className="bg-bordeaux">
               {columns.map((c) => (
@@ -55,7 +58,7 @@ export function DataTable<T>({
                     c.className,
                   )}
                 >
-                  {c.header}
+                  {trNode(tr, c.header)}
                 </th>
               ))}
             </tr>
@@ -97,7 +100,7 @@ export function DataTable<T>({
                 .filter((c) => !c.hideOnCard)
                 .map((c) => (
                   <div key={c.key} className="min-w-0">
-                    <dt className="text-[0.7rem] uppercase tracking-wide text-faint">{c.header}</dt>
+                    <dt className="text-[0.7rem] uppercase tracking-wide text-faint">{trNode(tr, c.header)}</dt>
                     <dd className={cn("break-words", c.numeric && "num")}>{c.cell(row)}</dd>
                   </div>
                 ))}

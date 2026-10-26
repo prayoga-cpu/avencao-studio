@@ -5,27 +5,31 @@ test.describe("sans session", () => {
   test("les pages redirigent vers la connexion", async ({ page }) => {
     await page.goto("/dashboard");
     await expect(page).toHaveURL(/\/connexion/);
-    await expect(page.getByRole("button", { name: /se connecter/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Recevoir un code de connexion" })).toBeVisible();
   });
 
   test("un mauvais mot de passe affiche une erreur générique", async ({ page }) => {
     await page.goto("/connexion");
-    await page.fill("input[name=email]", "inconnu@avencao.test");
-    await page.fill("input[name=password]", "mauvais-mot-de-passe");
-    await page.click("button[type=submit]");
+    await page.getByRole("button", { name: "Connexion par mot de passe" }).click();
+    const form = page.locator("form", { has: page.locator("input[name=password]") });
+    await form.locator("input[name=email]").fill("inconnu@avencao.test");
+    await form.locator("input[name=password]").fill("mauvais-mot-de-passe");
+    await form.getByRole("button", { name: "Se connecter" }).click();
     await expect(page.getByText(/Identifiants incorrects|Trop de tentatives/)).toBeVisible();
     await expect(page).toHaveURL(/\/connexion/);
   });
 
   test("connexion par le formulaire : mot de passe visible à la demande, arrivée sur le tableau de bord", async ({ page }) => {
     await page.goto("/connexion");
-    await page.getByLabel("Email").fill(ROLES.admin);
-    const password = page.getByLabel(/^Mot de passe/);
+    await page.getByRole("button", { name: "Connexion par mot de passe" }).click();
+    const form = page.locator("form", { has: page.locator("input[name=password]") });
+    await form.getByLabel(/^Email/).fill(ROLES.admin);
+    const password = form.getByLabel(/^Mot de passe/);
     await password.fill(process.env.E2E_PASSWORD || process.env.SEED_ADMIN_PASSWORD || "");
     await expect(password).toHaveAttribute("type", "password");
     await page.getByRole("button", { name: "Afficher le mot de passe" }).click();
     await expect(password).toHaveAttribute("type", "text");
-    await page.getByRole("button", { name: "Se connecter" }).click();
+    await form.getByRole("button", { name: "Se connecter" }).click();
     await expect(page).toHaveURL(/\/dashboard/);
     await expect(page.getByRole("heading", { name: "Tableau de bord" })).toBeVisible();
   });

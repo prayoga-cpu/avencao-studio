@@ -17,10 +17,15 @@ import { can } from "@/server/policies";
 import { getEditorMission } from "@/server/queries/production";
 import { agencyToday } from "@/server/services/common";
 import { getSettings } from "@/server/settings";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Mission" };
+export async function generateMetadata(): Promise<Metadata> {
+  const tr = await getT();
+  return { title: tr("Mission") };
+}
 
 export default async function MissionPage(props: PageProps<"/missions/[id]">) {
+  const tr = await getT();
   const actor = await requireActor();
   const { id } = await props.params;
   if (!can(actor, "missions.own")) redirect(`/videos/${id}`);
@@ -39,43 +44,43 @@ export default async function MissionPage(props: PageProps<"/missions/[id]">) {
           <span className="flex flex-wrap items-center gap-2">
             <StatusBadge {...VIDEO_STATUS[v.status]} />
             <StatusBadge {...PRIORITY[v.priority]} />
-            <span>{VIDEO_TYPE_LABELS[v.type]} · {v.project.client.displayName} · {v.project.title}</span>
+            <span>{tr(VIDEO_TYPE_LABELS[v.type])} · {v.project.client.displayName} · {v.project.title}</span>
           </span>
         }
       >
         {data.allowed.length ? (
           <div className="rounded-xl border border-brand-border bg-black/30 p-3">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle">Avancer</p>
-            <WorkflowActions videoId={v.id} options={data.allowed.map((to) => ({ to, requiresReason: false, hint: to === "INTERNAL_REVIEW" ? "Déposez d'abord votre version ci-dessous." : undefined }))} hasRevenue={false} />
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle">{tr("Avancer")}</p>
+            <WorkflowActions videoId={v.id} options={data.allowed.map((to) => ({ to, requiresReason: false, hint: to === "INTERNAL_REVIEW" ? tr("Déposez d'abord votre version ci-dessous.") : undefined }))} hasRevenue={false} />
           </div>
         ) : null}
       </PageHeader>
-      {v.isBlocked ? <Notice tone="danger" title="Vidéo bloquée" className="mb-4">{v.blockedReason}</Notice> : null}
+      {v.isBlocked ? <Notice tone="danger" title={tr("Vidéo bloquée")} className="mb-4">{v.blockedReason}</Notice> : null}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
         <div className="flex flex-col gap-5 xl:col-span-2">
-          <Section title="Brief">
+          <Section title={tr("Brief")}>
             <DefinitionList
               items={[
-                { label: "Format / ratio", value: [v.format, v.ratio].filter(Boolean).join(" · ") || "—" },
-                { label: "Langue", value: v.language ?? "—" },
-                { label: "Durées (rushs / attendue)", value: `${formatDurationSeconds(v.rushDurationSec)} / ${formatDurationSeconds(v.expectedDurationSec)}` },
-                { label: "Deadline interne", value: formatDateOnly(v.internalDeadline) },
-                { label: "Brief", value: v.brief ? <span className="whitespace-pre-wrap">{v.brief}</span> : "—" },
-                { label: "Objectifs", value: v.objectives ?? "—" },
-                { label: "Audience", value: v.audience ?? "—" },
-                { label: "Références", value: v.references ? <span className="whitespace-pre-wrap break-words">{v.references}</span> : "—" },
-                { label: "Sous-titrage", value: v.subtitleStyle ?? "—" },
-                { label: "Contraintes de marque", value: v.brandConstraints ?? "—" },
-                { label: "Instructions d'export", value: v.exportInstructions ?? "—" },
-                { label: "Allers-retours inclus", value: v.includedRevisionRounds ?? "—" },
+                { label: tr("Format / ratio"), value: [v.format, v.ratio].filter(Boolean).join(" · ") || "—" },
+                { label: tr("Langue"), value: v.language ?? "—" },
+                { label: tr("Durées (rushs / attendue)"), value: `${formatDurationSeconds(v.rushDurationSec)} / ${formatDurationSeconds(v.expectedDurationSec)}` },
+                { label: tr("Deadline interne"), value: formatDateOnly(v.internalDeadline) },
+                { label: tr("Brief"), value: v.brief ? <span className="whitespace-pre-wrap">{v.brief}</span> : "—" },
+                { label: tr("Objectifs"), value: v.objectives ?? "—" },
+                { label: tr("Audience"), value: v.audience ?? "—" },
+                { label: tr("Références"), value: v.references ? <span className="whitespace-pre-wrap break-words">{v.references}</span> : "—" },
+                { label: tr("Sous-titrage"), value: v.subtitleStyle ?? "—" },
+                { label: tr("Contraintes de marque"), value: v.brandConstraints ?? "—" },
+                { label: tr("Instructions d'export"), value: v.exportInstructions ?? "—" },
+                { label: tr("Allers-retours inclus"), value: v.includedRevisionRounds ?? "—" },
               ]}
             />
           </Section>
-          <Section title="Versions" description="Déposez le lien de review (Frame.io, Drive…). La vidéo passe en validation interne.">
+          <Section title={tr("Versions")} description={tr("Déposez le lien de review (Frame.io, Drive…). La vidéo passe en validation interne.")}>
             {canWork ? <div className="mb-4"><SubmitVersionForm videoId={v.id} nextNumber={(v.versions[0]?.number ?? 0) + 1} /></div> : null}
             <VersionsList canReview={false} videoStatus={v.status} timezone={settings.timezone} versions={v.versions.map((x) => ({ id: x.id, number: x.number, url: x.url, description: x.description, status: x.status, createdAt: x.createdAt, decisionNote: x.decisionNote }))} />
           </Section>
-          <Section title="Retours à traiter">
+          <Section title={tr("Retours à traiter")}>
             <FeedbackList
               canResolve={canWork}
               canReject={false}
@@ -85,37 +90,37 @@ export default async function MissionPage(props: PageProps<"/missions/[id]">) {
           </Section>
         </div>
         <div className="flex flex-col gap-5">
-          <Section title="Ma mission">
+          <Section title={tr("Ma mission")}>
             <ul className="flex flex-col gap-3">
               {assignments.map((a) => (
                 <li key={a.id} className="text-sm">
                   <p className="flex items-center justify-between gap-2 font-semibold">
-                    {ASSIGNMENT_ROLE_LABELS[a.role]} <StatusBadge {...ASSIGNMENT_STATUS[a.status]} />
+                    {tr(ASSIGNMENT_ROLE_LABELS[a.role])} <StatusBadge {...ASSIGNMENT_STATUS[a.status]} />
                   </p>
-                  <p className="text-xs text-subtle">Échéance {formatDateOnly(a.dueOn)} · {a.estimatedHours ? `${a.estimatedHours} h prévues` : "heures non estimées"}{a.scope ? ` · ${a.scope}` : ""}</p>
+                  <p className="text-xs text-subtle">{tr("Échéance")}{" "}{formatDateOnly(a.dueOn)} · {a.estimatedHours ? tr("{0} h prévues", [a.estimatedHours]) : tr("heures non estimées")}{a.scope ? ` · ${a.scope}` : ""}</p>
                   <p className="mt-1 text-xs text-subtle">
-                    Tarif : {a.rateMode ? `${RATE_MODE_LABELS[a.rateMode]} — ${a.unitPrice ?? "?"} ${a.currency ?? ""}${a.rateMode !== "PER_FINAL_MINUTE" ? ` × ${a.quantity}` : ""}` : "à convenir avec l'agence"}
+                    {tr("Tarif :")}{" "}{a.rateMode ? `${tr(RATE_MODE_LABELS[a.rateMode])} — ${a.unitPrice ?? "?"} ${a.currency ?? ""}${a.rateMode !== "PER_FINAL_MINUTE" ? ` × ${a.quantity}` : ""}` : tr("à convenir avec l'agence")}
                   </p>
                   {a.directCosts.map((c) => (
                     <p key={c.id} className="mt-1 flex flex-wrap items-center gap-2 text-xs">
-                      <span>Rémunération : <Money value={c.amount} currency={c.currency as CurrencyCode} empty="à renseigner par l'agence" /></span>
+                      <span>{tr("Rémunération :")}{" "}<Money value={c.amount} currency={c.currency as CurrencyCode} empty={tr("à renseigner par l'agence")} /></span>
                       <StatusBadge {...COST_STAGE[c.stage]} />
-                      <span className="text-subtle">payé <Money value={c.paid} currency={c.currency as CurrencyCode} /></span>
+                      <span className="text-subtle">{tr("payé")}{" "}<Money value={c.paid} currency={c.currency as CurrencyCode} /></span>
                     </p>
                   ))}
                 </li>
               ))}
             </ul>
-            <Link href="/mes-reglements" className="mt-3 inline-block text-xs text-brand hover:underline">Voir tous mes règlements</Link>
+            <Link href="/mes-reglements" className="mt-3 inline-block text-xs text-brand hover:underline">{tr("Voir tous mes règlements")}</Link>
           </Section>
-          <Section title="Liens utiles">
+          <Section title={tr("Liens utiles")}>
             <LinksPanel videoId={v.id} links={v.links} canManage={canWork} editorMode />
           </Section>
-          <Section title="Checklist avant envoi">
+          <Section title={tr("Checklist avant envoi")}>
             <Checklist items={v.checklist} canCheck={canWork} />
           </Section>
-          <Section title="Temps passé" description="Facultatif ; sert à la planification.">
-            <TimeEntryForm videoId={v.id} today={today} canOwnerTime={false} assignments={assignments.map((a) => ({ id: a.id, label: ASSIGNMENT_ROLE_LABELS[a.role] }))} />
+          <Section title={tr("Temps passé")} description={tr("Facultatif ; sert à la planification.")}>
+            <TimeEntryForm videoId={v.id} today={today} canOwnerTime={false} assignments={assignments.map((a) => ({ id: a.id, label: tr(ASSIGNMENT_ROLE_LABELS[a.role]) }))} />
           </Section>
         </div>
       </div>

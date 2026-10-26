@@ -24,6 +24,7 @@ import {
   setCostAllocationsAction,
   consumeRetainerCreditAction,
 } from "./actions";
+import { useT } from "#i18n";
 
 /** Dialogue générique : champs simples (chaînes) → action. */
 function FormDialog<T extends Record<string, string>>({
@@ -43,6 +44,7 @@ function FormDialog<T extends Record<string, string>>({
   submitLabel?: string;
   action: (values: T) => Promise<ActionResult<unknown>>;
 }) {
+  const tr = useT();
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState<T>(initial);
   const { pending, run } = useAction();
@@ -56,10 +58,10 @@ function FormDialog<T extends Record<string, string>>({
         </DialogHeader>
         <FormGrid>
           {fields.map((f) => (
-            <Field key={f.name} label={f.label} htmlFor={`fd-${f.name}`} required={f.required} hint={f.hint}>
+            <Field key={f.name} label={tr(f.label)} htmlFor={`fd-${f.name}`} required={f.required} hint={f.hint}>
               {f.type === "select" ? (
                 <NativeSelect value={values[f.name]} onChange={(e) => setValues({ ...values, [f.name]: e.target.value })}>
-                  {f.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  {f.options?.map((o) => <option key={o.value} value={o.value}>{tr(o.label)}</option>)}
                 </NativeSelect>
               ) : (
                 <Input type={f.type === "date" ? "date" : "text"} inputMode={f.type === "decimal" ? "decimal" : undefined} value={values[f.name]} onChange={(e) => setValues({ ...values, [f.name]: e.target.value })} />
@@ -68,7 +70,7 @@ function FormDialog<T extends Record<string, string>>({
           ))}
         </FormGrid>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>Annuler</Button>
+          <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>{tr("Annuler")}</Button>
           <Button disabled={pending} onClick={() => run(() => action(values), { onSuccess: () => setOpen(false) })}>
             {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}
             {submitLabel}
@@ -82,59 +84,62 @@ function FormDialog<T extends Record<string, string>>({
 const METHOD_OPTIONS = Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => ({ value, label }));
 
 export function IssueInvoiceDialog({ invoiceId, today, number }: { invoiceId: string; today: string; number: string }) {
+  const tr = useT();
   return (
     <FormDialog
-      trigger={<Button size="sm">Marquer émise</Button>}
-      title="Facture émise"
-      description="Renseignez le numéro et la date du document émis dans votre outil de facturation. Le taux de change est figé à la date d'émission."
+      trigger={<Button size="sm">{tr("Marquer émise")}</Button>}
+      title={tr("Facture émise")}
+      description={tr("Renseignez le numéro et la date du document émis dans votre outil de facturation. Le taux de change est figé à la date d'émission.")}
       initial={{ invoiceId, number, issueDate: today, dueDate: "", manualFxRate: "" }}
       fields={[
-        { name: "number", label: "Numéro", required: true },
-        { name: "issueDate", label: "Date d'émission", type: "date", required: true },
-        { name: "dueDate", label: "Échéance", type: "date", hint: "Vide : conditions du client." },
-        { name: "manualFxRate", label: "Taux manuel (si devise ≠ EUR)", type: "decimal" },
+        { name: "number", label: tr("Numéro"), required: true },
+        { name: "issueDate", label: tr("Date d'émission"), type: "date", required: true },
+        { name: "dueDate", label: tr("Échéance"), type: "date", hint: tr("Vide : conditions du client.") },
+        { name: "manualFxRate", label: tr("Taux manuel (si devise ≠ EUR)"), type: "decimal" },
       ]}
-      submitLabel="Marquer émise"
+      submitLabel={tr("Marquer émise")}
       action={issueInvoiceAction}
     />
   );
 }
 
 export function CreditNoteDialog({ invoiceId, today, defaultVat }: { invoiceId: string; today: string; defaultVat: string }) {
+  const tr = useT();
   return (
     <FormDialog
-      trigger={<Button size="sm" variant="outline">Émettre un avoir</Button>}
-      title="Avoir sur cette facture"
-      description="Un avoir réduit la facturation une seule fois, à sa date d'émission. Un remboursement éventuel s'enregistre ensuite comme mouvement de trésorerie."
+      trigger={<Button size="sm" variant="outline">{tr("Émettre un avoir")}</Button>}
+      title={tr("Avoir sur cette facture")}
+      description={tr("Un avoir réduit la facturation une seule fois, à sa date d'émission. Un remboursement éventuel s'enregistre ensuite comme mouvement de trésorerie.")}
       initial={{ invoiceId, number: "", issueDate: today, net: "", vatRate: defaultVat, reason: "", manualFxRate: "" }}
       fields={[
-        { name: "number", label: "Numéro de l'avoir" },
-        { name: "issueDate", label: "Date d'émission", type: "date", required: true },
-        { name: "net", label: "Montant HT", type: "decimal", required: true },
-        { name: "vatRate", label: "TVA %", type: "decimal", required: true },
-        { name: "reason", label: "Motif", required: true },
-        { name: "manualFxRate", label: "Taux manuel (si devise ≠ EUR)", type: "decimal" },
+        { name: "number", label: tr("Numéro de l'avoir") },
+        { name: "issueDate", label: tr("Date d'émission"), type: "date", required: true },
+        { name: "net", label: tr("Montant HT"), type: "decimal", required: true },
+        { name: "vatRate", label: tr("TVA %"), type: "decimal", required: true },
+        { name: "reason", label: tr("Motif"), required: true },
+        { name: "manualFxRate", label: tr("Taux manuel (si devise ≠ EUR)"), type: "decimal" },
       ]}
-      submitLabel="Enregistrer l'avoir"
+      submitLabel={tr("Enregistrer l'avoir")}
       action={createCreditNoteAction}
     />
   );
 }
 
 export function RefundDialog({ creditNoteId, paymentId, today, max, currency, label }: { creditNoteId?: string; paymentId?: string; today: string; max: string; currency: string; label: string }) {
+  const tr = useT();
   return (
     <FormDialog
       trigger={<Button size="xs" variant="outline">{label}</Button>}
-      title="Enregistrer un remboursement"
-      description={`Mouvement de trésorerie sortant déjà effectué (aucun virement déclenché). Maximum : ${max} ${currency}. Ne réduit pas une seconde fois le CA.`}
+      title={tr("Enregistrer un remboursement")}
+      description={tr("Mouvement de trésorerie sortant déjà effectué (aucun virement déclenché). Maximum : {0} {1}. Ne réduit pas une seconde fois le CA.", [max, currency])}
       initial={{ creditNoteId: creditNoteId ?? "", paymentId: paymentId ?? "", refundedOn: today, amount: max, manualFxRate: "", method: "BANK_TRANSFER", reference: "", reason: "" }}
       fields={[
-        { name: "refundedOn", label: "Date", type: "date", required: true },
-        { name: "amount", label: `Montant (${currency})`, type: "decimal", required: true },
-        { name: "method", label: "Moyen", type: "select", options: METHOD_OPTIONS },
-        { name: "reference", label: "Référence" },
-        { name: "reason", label: "Motif", required: true },
-        { name: "manualFxRate", label: "Taux manuel (si devise ≠ EUR)", type: "decimal" },
+        { name: "refundedOn", label: tr("Date"), type: "date", required: true },
+        { name: "amount", label: tr("Montant ({0})", [currency]), type: "decimal", required: true },
+        { name: "method", label: tr("Moyen"), type: "select", options: METHOD_OPTIONS },
+        { name: "reference", label: tr("Référence") },
+        { name: "reason", label: tr("Motif"), required: true },
+        { name: "manualFxRate", label: tr("Taux manuel (si devise ≠ EUR)"), type: "decimal" },
       ]}
       action={(v) => recordRefundAction({ ...v, method: v.method as "BANK_TRANSFER" })}
     />
@@ -142,16 +147,17 @@ export function RefundDialog({ creditNoteId, paymentId, today, max, currency, la
 }
 
 export function AllocatePaymentDialog({ invoiceId, payments, balance }: { invoiceId: string; payments: { id: string; receivedOn: string; available: string; reference: string | null }[]; balance: string }) {
+  const tr = useT();
   if (payments.length === 0) return null;
   return (
     <FormDialog
-      trigger={<Button size="sm" variant="outline">Affecter un encaissement existant</Button>}
-      title="Affecter un encaissement"
-      description="Reliquat d'un paiement déjà enregistré. Le montant ne peut dépasser ni le disponible du paiement, ni le solde de la facture."
+      trigger={<Button size="sm" variant="outline">{tr("Affecter un encaissement existant")}</Button>}
+      title={tr("Affecter un encaissement")}
+      description={tr("Reliquat d'un paiement déjà enregistré. Le montant ne peut dépasser ni le disponible du paiement, ni le solde de la facture.")}
       initial={{ paymentId: payments[0].id, invoiceId, amount: [payments[0].available, balance].sort((a, b) => (parseDecimalInput(a)!.lt(parseDecimalInput(b)!) ? -1 : 1))[0] }}
       fields={[
-        { name: "paymentId", label: "Encaissement", type: "select", options: payments.map((p) => ({ value: p.id, label: `${p.receivedOn} — disponible ${p.available}${p.reference ? ` (${p.reference})` : ""}` })) },
-        { name: "amount", label: "Montant", type: "decimal", required: true },
+        { name: "paymentId", label: tr("Encaissement"), type: "select", options: payments.map((p) => ({ value: p.id, label: tr("{0} — disponible {1}{2}", [p.receivedOn, p.available, p.reference ? ` (${p.reference})` : ""]) })) },
+        { name: "amount", label: tr("Montant"), type: "decimal", required: true },
       ]}
       action={allocateClientPaymentAction}
     />
@@ -159,16 +165,17 @@ export function AllocatePaymentDialog({ invoiceId, payments, balance }: { invoic
 }
 
 export function CancelLineDialog({ lineId, max, today }: { lineId: string; max: string; today: string }) {
+  const tr = useT();
   return (
     <FormDialog
-      trigger={<Button size="xs" variant="ghost">Annuler (partiellement)</Button>}
-      title="Annulation de vente"
-      description={`Réduit les ventes signées à la date d'annulation (net restant : ${max}). Les allocations sont recalculées au prorata.`}
+      trigger={<Button size="xs" variant="ghost">{tr("Annuler (partiellement)")}</Button>}
+      title={tr("Annulation de vente")}
+      description={tr("Réduit les ventes signées à la date d'annulation (net restant : {0}). Les allocations sont recalculées au prorata.", [max])}
       initial={{ lineId, amount: max, cancelledOn: today, reason: "" }}
       fields={[
-        { name: "amount", label: "Montant HT annulé", type: "decimal", required: true },
-        { name: "cancelledOn", label: "Date", type: "date", required: true },
-        { name: "reason", label: "Motif / accord client", required: true },
+        { name: "amount", label: tr("Montant HT annulé"), type: "decimal", required: true },
+        { name: "cancelledOn", label: tr("Date"), type: "date", required: true },
+        { name: "reason", label: tr("Motif / accord client"), required: true },
       ]}
       action={cancelSalesLineAction}
     />
@@ -176,25 +183,27 @@ export function CancelLineDialog({ lineId, max, today }: { lineId: string; max: 
 }
 
 export function MarkExpensePaidButton({ id, today }: { id: string; today: string }) {
+  const tr = useT();
   return (
     <FormDialog
-      trigger={<Button size="xs" variant="outline">Marquer payée</Button>}
-      title="Charge payée"
+      trigger={<Button size="xs" variant="outline">{tr("Marquer payée")}</Button>}
+      title={tr("Charge payée")}
       initial={{ paidOn: today }}
-      fields={[{ name: "paidOn", label: "Date de paiement", type: "date", required: true }]}
+      fields={[{ name: "paidOn", label: tr("Date de paiement"), type: "date", required: true }]}
       action={(v) => markExpensePaidAction(id, v.paidOn)}
     />
   );
 }
 
 export function GenerateRetainerButton({ retainerId, month }: { retainerId: string; month: string }) {
+  const tr = useT();
   return (
     <FormDialog
-      trigger={<Button size="sm">Générer une période</Button>}
-      title="Générer la période du forfait"
-      description="Idempotent : si la période existe déjà, rien n'est recréé (ni vente, ni facture brouillon)."
+      trigger={<Button size="sm">{tr("Générer une période")}</Button>}
+      title={tr("Générer la période du forfait")}
+      description={tr("Idempotent : si la période existe déjà, rien n'est recréé (ni vente, ni facture brouillon).")}
       initial={{ month }}
-      fields={[{ name: "month", label: "Mois (n'importe quel jour du mois)", type: "date", required: true }]}
+      fields={[{ name: "month", label: tr("Mois (n'importe quel jour du mois)"), type: "date", required: true }]}
       action={async (v) => {
         const r = await generateRetainerPeriodAction(retainerId, v.month);
         if (r.ok) toast[r.data.created ? "success" : "info"](r.data.created ? "Période générée." : `Aucune création : ${"reason" in r.data ? r.data.reason : "déjà fait"}.`);
@@ -205,31 +214,33 @@ export function GenerateRetainerButton({ retainerId, month }: { retainerId: stri
 }
 
 export function UseCreditForm({ periodId, videos }: { periodId: string; videos: { id: string; reference: string; title: string; type: string }[] }) {
+  const tr = useT();
   if (videos.length === 0) return null;
   return (
     <FormDialog
-      trigger={<Button size="xs" variant="outline">Consommer un crédit</Button>}
-      title="Consommer un crédit"
-      description="Rattache une vidéo du client à la période. N'a aucun effet sur les encaissements."
+      trigger={<Button size="xs" variant="outline">{tr("Consommer un crédit")}</Button>}
+      title={tr("Consommer un crédit")}
+      description={tr("Rattache une vidéo du client à la période. N'a aucun effet sur les encaissements.")}
       initial={{ videoId: videos[0].id }}
-      fields={[{ name: "videoId", label: "Vidéo", type: "select", options: videos.map((v) => ({ value: v.id, label: `${v.reference} — ${v.title}` })) }]}
+      fields={[{ name: "videoId", label: tr("Vidéo"), type: "select", options: videos.map((v) => ({ value: v.id, label: `${v.reference} — ${v.title}` })) }]}
       action={(v) => consumeRetainerCreditAction(periodId, v.videoId)}
     />
   );
 }
 
 export function ExchangeRateDialog({ today }: { today: string }) {
+  const tr = useT();
   return (
     <FormDialog
-      trigger={<Button size="sm">Ajouter un taux</Button>}
-      title="Taux de change de référence"
-      description="Unités de devise pour 1 €. Utilisé par défaut à partir de sa date ; les opérations passées gardent leur taux figé."
+      trigger={<Button size="sm">{tr("Ajouter un taux")}</Button>}
+      title={tr("Taux de change de référence")}
+      description={tr("Unités de devise pour 1 €. Utilisé par défaut à partir de sa date ; les opérations passées gardent leur taux figé.")}
       initial={{ date: today, currency: "IDR", unitsPerEur: "", note: "" }}
       fields={[
-        { name: "date", label: "Date d'effet", type: "date", required: true },
-        { name: "currency", label: "Devise", type: "select", options: [{ value: "IDR", label: "IDR" }, { value: "USD", label: "USD" }] },
-        { name: "unitsPerEur", label: "Unités pour 1 €", type: "decimal", required: true },
-        { name: "note", label: "Source / note" },
+        { name: "date", label: tr("Date d'effet"), type: "date", required: true },
+        { name: "currency", label: tr("Devise"), type: "select", options: [{ value: "IDR", label: tr("IDR") }, { value: "USD", label: tr("USD") }] },
+        { name: "unitsPerEur", label: tr("Unités pour 1 €"), type: "decimal", required: true },
+        { name: "note", label: tr("Source / note") },
       ]}
       action={(v) => saveExchangeRateAction({ ...v, currency: v.currency as "IDR" | "USD" })}
     />
@@ -250,6 +261,7 @@ export function ReallocateDialog({
   videos: { id: string; reference: string; title: string }[];
   net: string;
 }) {
+  const tr = useT();
   const [open, setOpen] = useState(false);
   const [m, setM] = useState<"EQUAL" | "WEIGHTED" | "MANUAL" | "NONE">(method);
   const [rows, setRows] = useState(current.map((c) => ({ videoId: c.videoId, value: m === "MANUAL" ? c.amount : (c.weight ?? "") })));
@@ -257,17 +269,17 @@ export function ReallocateDialog({
   const manualTotal = sum(rows.map((r) => parseDecimalInput(r.value) ?? new Decimal(0)));
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button size="xs" variant="outline">Répartir</Button></DialogTrigger>
+      <DialogTrigger asChild><Button size="xs" variant="outline">{tr("Répartir")}</Button></DialogTrigger>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Répartition analytique</DialogTitle>
-          <DialogDescription>Net à répartir : {net}. Somme exacte garantie ; n&apos;affecte ni les ventes signées ni la facturation.</DialogDescription>
+          <DialogTitle>{tr("Répartition analytique")}</DialogTitle>
+          <DialogDescription>{tr("Net à répartir :")}{" "}{net}{tr(". Somme exacte garantie ; n'affecte ni les ventes signées ni la facturation.")}</DialogDescription>
         </DialogHeader>
-        <NativeSelect aria-label="Méthode" value={m} onChange={(e) => setM(e.target.value as typeof m)}>
-          <option value="EQUAL">Parts égales</option>
-          <option value="WEIGHTED">Pondération</option>
-          <option value="MANUAL">Montants manuels</option>
-          <option value="NONE">Retirer la répartition</option>
+        <NativeSelect aria-label={tr("Méthode")} value={m} onChange={(e) => setM(e.target.value as typeof m)}>
+          <option value="EQUAL">{tr("Parts égales")}</option>
+          <option value="WEIGHTED">{tr("Pondération")}</option>
+          <option value="MANUAL">{tr("Montants manuels")}</option>
+          <option value="NONE">{tr("Retirer la répartition")}</option>
         </NativeSelect>
         {m !== "NONE" ? (
           <ul className="flex max-h-72 flex-col gap-1.5 overflow-y-auto av-scroll">
@@ -275,21 +287,20 @@ export function ReallocateDialog({
               const row = rows.find((r) => r.videoId === v.id);
               return (
                 <li key={v.id} className="flex min-w-0 items-center gap-2 text-sm">
-                  <input type="checkbox" aria-label={`Inclure ${v.reference}`} className="accent-[var(--av-accent)]" checked={!!row} onChange={(e) => setRows(e.target.checked ? [...rows, { videoId: v.id, value: "" }] : rows.filter((r) => r.videoId !== v.id))} />
+                  <input type="checkbox" aria-label={tr("Inclure {0}", [v.reference])} className="accent-[var(--av-accent)]" checked={!!row} onChange={(e) => setRows(e.target.checked ? [...rows, { videoId: v.id, value: "" }] : rows.filter((r) => r.videoId !== v.id))} />
                   <span className="flex-1 truncate">{v.reference} — {v.title}</span>
-                  {row && m !== "EQUAL" ? <Input aria-label={`Valeur ${v.reference}`} className="h-7 w-24" inputMode="decimal" value={row.value} onChange={(e) => setRows(rows.map((r) => (r.videoId === v.id ? { ...r, value: e.target.value } : r)))} /> : null}
+                  {row && m !== "EQUAL" ? <Input aria-label={tr("Valeur {0}", [v.reference])} className="h-7 w-24" inputMode="decimal" value={row.value} onChange={(e) => setRows(rows.map((r) => (r.videoId === v.id ? { ...r, value: e.target.value } : r)))} /> : null}
                 </li>
               );
             })}
           </ul>
         ) : null}
-        {m === "MANUAL" ? <p className="text-xs text-subtle">Total saisi : {manualTotal.toFixed(2)} / {net}</p> : null}
+        {m === "MANUAL" ? <p className="text-xs text-subtle">{tr("Total saisi :")}{" "}{manualTotal.toFixed(2)} / {net}</p> : null}
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>Annuler</Button>
+          <Button variant="outline" onClick={() => setOpen(false)}>{tr("Annuler")}</Button>
           <Button disabled={pending} onClick={() => run(() => reallocateLineAction({ lineId, allocationMethod: m, allocations: m === "NONE" ? [] : rows }), { onSuccess: () => setOpen(false) })}>
             {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-            Enregistrer
-          </Button>
+            {tr("Enregistrer")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -298,6 +309,7 @@ export function ReallocateDialog({
 
 /** Allocation analytique d'un coût (enveloppe mensuelle, achat projet). */
 export function CostAllocationEditor({ costId, amount, currency, current, videos }: { costId: string; amount: string; currency: string; current: { videoId: string; amount: string }[]; videos: { id: string; reference: string; title: string }[] }) {
+  const tr = useT();
   const [rows, setRows] = useState(current);
   const { pending, run } = useAction();
   const total = sum(rows.map((r) => parseDecimalInput(r.amount) ?? new Decimal(0)));
@@ -309,19 +321,18 @@ export function CostAllocationEditor({ costId, amount, currency, current, videos
           const row = rows.find((r) => r.videoId === v.id);
           return (
             <li key={v.id} className="flex min-w-0 items-center gap-2 text-sm">
-              <input type="checkbox" aria-label={`Allouer à ${v.reference}`} className="accent-[var(--av-accent)]" checked={!!row} onChange={(e) => setRows(e.target.checked ? [...rows, { videoId: v.id, amount: "" }] : rows.filter((r) => r.videoId !== v.id))} />
+              <input type="checkbox" aria-label={tr("Allouer à {0}", [v.reference])} className="accent-[var(--av-accent)]" checked={!!row} onChange={(e) => setRows(e.target.checked ? [...rows, { videoId: v.id, amount: "" }] : rows.filter((r) => r.videoId !== v.id))} />
               <span className="flex-1 truncate">{v.reference} — {v.title}</span>
-              {row ? <Input aria-label={`Montant ${v.reference}`} className="h-8 w-28" inputMode="decimal" value={row.amount} onChange={(e) => setRows(rows.map((r) => (r.videoId === v.id ? { ...r, amount: e.target.value } : r)))} /> : null}
+              {row ? <Input aria-label={tr("Montant {0}", [v.reference])} className="h-8 w-28" inputMode="decimal" value={row.amount} onChange={(e) => setRows(rows.map((r) => (r.videoId === v.id ? { ...r, amount: e.target.value } : r)))} /> : null}
             </li>
           );
         })}
       </ul>
-      {videos.length === 0 ? <p className="text-sm text-subtle">Aucune vidéo candidate (missions du prestataire ou vidéos du projet).</p> : null}
-      <p className={`text-sm ${rest.isNegative() ? "text-danger" : "text-subtle"}`}>Alloué {total.toFixed(2)} {currency} · non alloué {rest.toFixed(2)} {currency} (reste visible dans le résultat)</p>
+      {videos.length === 0 ? <p className="text-sm text-subtle">{tr("Aucune vidéo candidate (missions du prestataire ou vidéos du projet).")}</p> : null}
+      <p className={`text-sm ${rest.isNegative() ? "text-danger" : "text-subtle"}`}>{tr("Alloué")}{" "}{total.toFixed(2)} {currency} {" "}{tr("· non alloué")}{" "}{rest.toFixed(2)} {currency} {" "}{tr("(reste visible dans le résultat)")}</p>
       <Button className="self-start" size="sm" disabled={pending || rest.isNegative()} onClick={() => run(() => setCostAllocationsAction({ costId, allocations: rows }))}>
         {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-        Enregistrer l&apos;allocation
-      </Button>
+        {tr("Enregistrer l'allocation")}</Button>
     </div>
   );
 }

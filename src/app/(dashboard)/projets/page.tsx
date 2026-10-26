@@ -15,10 +15,15 @@ import { requirePagePermission } from "@/server/auth/session";
 import { can } from "@/server/policies";
 import { clientOptions, staffOptions } from "@/server/queries/options";
 import { listProjects } from "@/server/queries/production";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Projets" };
+export async function generateMetadata(): Promise<Metadata> {
+  const tr = await getT();
+  return { title: tr("Projets") };
+}
 
 export default async function ProjectsPage(props: PageProps<"/projets">) {
+  const tr = await getT();
   const actor = await requirePagePermission("projects.read");
   const params = await props.searchParams;
   const page = pageFrom(params);
@@ -31,16 +36,16 @@ export default async function ProjectsPage(props: PageProps<"/projets">) {
   return (
     <>
       <PageHeader
-        title="Projets"
-        subtitle="Commandes, campagnes ou périodes de collaboration — chacune contient un ou plusieurs livrables vidéo."
-        actions={can(actor, "projects.write") ? <Button asChild><Link href="/projets/nouveau"><Plus aria-hidden /> Nouveau projet</Link></Button> : null}
+        title={tr("Projets")}
+        subtitle={tr("Commandes, campagnes ou périodes de collaboration — chacune contient un ou plusieurs livrables vidéo.")}
+        actions={can(actor, "projects.write") ? <Button asChild><Link href="/projets/nouveau"><Plus aria-hidden /> {" "}{tr("Nouveau projet")}</Link></Button> : null}
       >
         <FilterBar
-          searchPlaceholder="Titre, référence, client…"
+          searchPlaceholder={tr("Titre, référence, client…")}
           filters={[
-            { name: "statut", label: "Statut", options: enumOptions(PROJECT_STATUS), allLabel: "Statut : en cours" },
-            { name: "client", label: "Client", options: clients },
-            { name: "responsable", label: "Responsable", options: owners },
+            { name: "statut", label: tr("Statut"), options: enumOptions(PROJECT_STATUS), allLabel: tr("Statut : en cours") },
+            { name: "client", label: tr("Client"), options: clients },
+            { name: "responsable", label: tr("Responsable"), options: owners },
           ]}
         />
       </PageHeader>
@@ -48,28 +53,28 @@ export default async function ProjectsPage(props: PageProps<"/projets">) {
         rows={rows}
         rowKey={(r) => r.id}
         rowHref={(r) => `/projets/${r.id}`}
-        empty={<EmptyState title="Aucun projet" description="Créez un projet depuis un client, une opportunité gagnée ou ici." />}
+        empty={<EmptyState title={tr("Aucun projet")} description={tr("Créez un projet depuis un client, une opportunité gagnée ou ici.")} />}
         columns={[
-          { key: "t", header: "Projet", cell: (r) => <><span className="text-xs text-faint">{r.reference}</span><span className="block">{r.title}</span></> },
-          { key: "c", header: "Client", cell: (r) => r.client.displayName },
-          { key: "s", header: "Statut", cell: (r) => <StatusBadge {...PROJECT_STATUS[r.status]} /> },
-          { key: "p", header: "Priorité", cell: (r) => <StatusBadge {...PRIORITY[r.priority]} />, hideOnCard: true },
-          { key: "v", header: "Livrées", cell: (r) => `${r.deliveredCount} / ${r.videoCount}`, numeric: true },
-          { key: "d", header: "Deadline client", cell: (r) => formatDateOnly(r.clientDeadline) },
-          { key: "o", header: "Responsable", cell: (r) => r.owner ?? "—", hideOnCard: true },
+          { key: "t", header: tr("Projet"), cell: (r) => <><span className="text-xs text-faint">{r.reference}</span><span className="block">{r.title}</span></> },
+          { key: "c", header: tr("Client"), cell: (r) => r.client.displayName },
+          { key: "s", header: tr("Statut"), cell: (r) => <StatusBadge {...PROJECT_STATUS[r.status]} /> },
+          { key: "p", header: tr("Priorité"), cell: (r) => <StatusBadge {...PRIORITY[r.priority]} />, hideOnCard: true },
+          { key: "v", header: tr("Livrées"), cell: (r) => `${r.deliveredCount} / ${r.videoCount}`, numeric: true },
+          { key: "d", header: tr("Deadline client"), cell: (r) => formatDateOnly(r.clientDeadline) },
+          { key: "o", header: tr("Responsable"), cell: (r) => r.owner ?? "—", hideOnCard: true },
           ...(showFinance
             ? [
-                { key: "sold", header: "Vendu HT", numeric: true, cell: (r: (typeof rows)[number]) => <Money value={r.finance?.soldEur} /> },
+                { key: "sold", header: tr("Vendu HT"), numeric: true, cell: (r: (typeof rows)[number]) => <Money value={r.finance?.soldEur} /> },
                 {
                   key: "m",
-                  header: "Marge",
+                  header: tr("Marge"),
                   numeric: true,
                   cell: (r: (typeof rows)[number]) =>
                     r.finance ? (
                       <span className="flex flex-col items-end">
                         <Money value={r.finance.marginEur} colorize />
                         <span className={r.finance.missing ? "text-xs text-warning" : "text-xs text-subtle"}>
-                          {r.finance.missing ? `provisoire · ${r.finance.missing} coût(s) manquant(s)` : <Percent value={r.finance.ratePct} />}
+                          {r.finance.missing ? tr("provisoire · {0} coût(s) manquant(s)", [r.finance.missing]) : <Percent value={r.finance.ratePct} />}
                         </span>
                       </span>
                     ) : null,

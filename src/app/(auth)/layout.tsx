@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { LanguageToggle } from "@/components/shell/language-toggle";
 
 /** Pages publiques : fond Avencao (vagues fuchsia), carte centrée. */
 export default function AuthLayout({ children }: LayoutProps<"/">) {
@@ -6,6 +7,9 @@ export default function AuthLayout({ children }: LayoutProps<"/">) {
     <div className="relative flex min-h-dvh items-center justify-center px-4 py-10">
       <Image src="/brand/fond.jpg" alt="" fill priority className="object-cover opacity-70" sizes="100vw" />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(8,8,8,0.55),rgba(8,8,8,0.92))]" aria-hidden />
+      <div className="absolute right-4 top-4 z-20">
+        <LanguageToggle />
+      </div>
       <main className="relative z-10 w-full max-w-md">{children}</main>
     </div>
   );

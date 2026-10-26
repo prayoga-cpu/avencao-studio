@@ -7,10 +7,15 @@ import { requirePagePermission } from "@/server/auth/session";
 import { can } from "@/server/policies";
 import { prisma } from "@/server/db";
 import { staffOptions } from "@/server/queries/options";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Modifier le client" };
+export async function generateMetadata(): Promise<Metadata> {
+  const tr = await getT();
+  return { title: tr("Modifier le client") };
+}
 
 export default async function EditClientPage(props: PageProps<"/clients/[id]/modifier">) {
+  const tr = await getT();
   const actor = await requirePagePermission("clients.write");
   const { id } = await props.params;
   const [c, owners] = await Promise.all([
@@ -21,7 +26,7 @@ export default async function EditClientPage(props: PageProps<"/clients/[id]/mod
   const s = (v: string | null) => v ?? "";
   return (
     <div className="mx-auto max-w-4xl">
-      <PageHeader title={`Modifier — ${c.displayName}`} />
+      <PageHeader title={tr("Modifier — {0}", [c.displayName])} />
       <ClientForm
         clientId={c.id}
         owners={owners}

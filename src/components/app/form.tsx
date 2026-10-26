@@ -9,6 +9,8 @@ import { toast } from "sonner";
 import type { z } from "zod";
 import { Button } from "@/components/ui/button";
 import type { ActionResult } from "@/lib/action-result";
+import { useT } from "#i18n";
+import { trNode } from "@/lib/i18n/translate";
 
 /**
  * Formulaire React Hook Form + Zod : validation immédiate côté navigateur, revalidation
@@ -30,6 +32,7 @@ export function useServerForm<TSchema extends z.ZodType<FieldValues, FieldValues
   refresh?: boolean;
 }) {
   const router = useRouter();
+  const tr = useT();
   const [pending, startTransition] = useTransition();
   const form = useForm<z.input<TSchema>, unknown, z.input<TSchema>>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -45,15 +48,15 @@ export function useServerForm<TSchema extends z.ZodType<FieldValues, FieldValues
           for (const [field, messages] of Object.entries(result.fieldErrors ?? {})) {
             if (messages?.[0]) form.setError(field as Path<z.input<TSchema>>, { message: messages[0] });
           }
-          toast.error(result.error);
+          toast.error(tr(result.error));
           return;
         }
         const msg = result.message ?? successMessage;
-        if (msg) toast.success(msg);
+        if (msg) toast.success(tr(msg));
         onSuccess?.(result.data);
         if (refresh) router.refresh();
       } catch {
-        toast.error("Connexion au serveur impossible. Vos saisies sont conservées : réessayez.");
+        toast.error(tr("Connexion au serveur impossible. Vos saisies sont conservées : réessayez."));
       }
     });
   });
@@ -80,18 +83,18 @@ export function FormActions({
   cancelHref?: string;
   extra?: ReactNode;
 }) {
+  const tr = useT();
   const router = useRouter();
   return (
     <div className="sticky bottom-0 z-10 -mx-1 mt-2 flex flex-wrap items-center justify-end gap-2 border-t border-border bg-background/95 px-1 py-3 backdrop-blur">
       {extra}
       {onCancel || cancelHref ? (
         <Button type="button" variant="outline" disabled={pending} onClick={() => (onCancel ? onCancel() : router.push(cancelHref!))}>
-          Annuler
-        </Button>
+          {tr("Annuler")}</Button>
       ) : null}
       <Button type="submit" disabled={pending} aria-busy={pending || undefined}>
         {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-        {submitLabel}
+        {trNode(tr, submitLabel)}
       </Button>
     </div>
   );

@@ -5,17 +5,22 @@ import { requirePagePermission } from "@/server/auth/session";
 import { openInvoicesByClient } from "@/server/queries/finance";
 import { clientOptions } from "@/server/queries/options";
 import { agencyToday } from "@/server/services/common";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Enregistrer un encaissement" };
+export async function generateMetadata(): Promise<Metadata> {
+  const tr = await getT();
+  return { title: tr("Enregistrer un encaissement") };
+}
 
 export default async function NewPaymentPage(props: PageProps<"/finances/encaissements/nouveau">) {
+  const tr = await getT();
   const actor = await requirePagePermission("payments.write");
   const params = await props.searchParams;
   const [clients, open, today] = await Promise.all([clientOptions(), openInvoicesByClient(actor), agencyToday()]);
   const inv = open.find((i) => i.id === params.facture);
   return (
     <div className="mx-auto max-w-4xl">
-      <PageHeader title="Enregistrer un encaissement" subtitle="Acompte, solde, paiement partiel ou couvrant plusieurs factures." />
+      <PageHeader title={tr("Enregistrer un encaissement")} subtitle={tr("Acompte, solde, paiement partiel ou couvrant plusieurs factures.")} />
       <ClientPaymentForm
         clients={clients}
         openInvoices={open}

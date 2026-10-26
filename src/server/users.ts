@@ -114,9 +114,84 @@ export async function findValidToken(token: string) {
   return row;
 }
 
+type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+/** Mot de passe du compte « credential » Better Auth (création ou remplacement). */
+async function storeCredentialPassword(tx: TxClient, userId: string, hash: string) {
+  const account = await tx.account.findFirst({ where: { userId, providerId: "credential" } });
+  if (account) await tx.account.update({ where: { id: account.id }, data: { password: hash } });
+  else await tx.account.create({ data: { userId, providerId: "credential", accountId: userId, password: hash } });
+}
+
+function assertPasswordPolicy(password: string) {
+  if (password.length < 10 || password.length > 128) throw new DomainError("Le mot de passe doit contenir entre 10 et 128 caractères.");
+}
+
+/**
+ * Création directe d'un compte par un administrateur, avec mot de passe défini par lui :
+ * le compte est actif immédiatement (aucun email requis). Le rôle est fixé par l'admin.
+ */
+export async function createUserWithPassword(
+  actor: Actor,
+  input: { email: string; name: string; role: Role; financeAccess: boolean; editorId?: string | null; password: string },
+): Promise<{ id: string; email: string }> {
+  assertCan(actor, "users.manage");
+  if (!ASSIGNABLE_ROLES.includes(input.role)) throw new DomainError("Rôle non attribuable.");
+  assertPasswordPolicy(input.password);
+  const email = input.email.trim().toLowerCase();
+  const existing = await prisma.user.findUnique({ where: { email }, include: { accounts: true } });
+  if (existing?.accounts.some((a) => a.providerId === "credential" && a.password)) {
+    throw new DomainError("Un compte avec mot de passe existe déjà pour cet email : utilisez « Mot de passe » sur sa ligne.");
+  }
+  if (input.editorId) {
+    const editor = await prisma.editorProfile.findUnique({ where: { id: input.editorId } });
+    if (!editor) throw new DomainError("Fiche prestataire introuvable.");
+    if (editor.userId && editor.userId !== existing?.id) throw new DomainError("Cette fiche est déjà liée à un autre compte.");
+  }
+  const hash = await hashPassword(input.password);
+  const user = await prisma.$transaction(async (tx) => {
+    const u = existing
+      ? await tx.user.update({
+          where: { id: existing.id },
+          data: { name: input.name, role: input.role, financeAccess: input.financeAccess, status: "ACTIVE", emailVerified: true },
+        })
+      : await tx.user.create({
+          data: { email, name: input.name, role: input.role, financeAccess: input.financeAccess, status: "ACTIVE", emailVerified: true },
+        });
+    await storeCredentialPassword(tx, u.id, hash);
+    if (input.editorId) await tx.editorProfile.update({ where: { id: input.editorId }, data: { userId: u.id } });
+    return u;
+  });
+  await recordAudit(prisma, {
+    actorId: actor.id,
+    action: "user.create_with_password",
+    entityType: "User",
+    entityId: user.id,
+    after: { email, role: input.role, financeAccess: input.financeAccess, editorId: input.editorId ?? null },
+  });
+  return { id: user.id, email };
+}
+
+/** Changement de mot de passe par un administrateur : toutes les sessions de l'utilisateur sont fermées. */
+export async function setUserPassword(actor: Actor, userId: string, password: string): Promise<{ id: string }> {
+  assertCan(actor, "users.manage");
+  assertPasswordPolicy(password);
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new DomainError("Utilisateur introuvable.");
+  const hash = await hashPassword(password);
+  await prisma.$transaction(async (tx) => {
+    await storeCredentialPassword(tx, userId, hash);
+    await tx.accessToken.updateMany({ where: { userId, usedAt: null, revokedAt: null }, data: { revokedAt: new Date() } });
+    await tx.session.deleteMany({ where: { userId } });
+    await tx.user.update({ where: { id: userId }, data: { emailVerified: true } });
+  });
+  await recordAudit(prisma, { actorId: actor.id, action: "user.password_set_by_admin", entityType: "User", entityId: userId });
+  return { id: userId };
+}
+
 /** Définit le mot de passe (hachage Better Auth) et révoque toutes les sessions existantes. */
 export async function consumeToken(token: string, password: string): Promise<{ email: string }> {
-  if (password.length < 10 || password.length > 128) throw new DomainError("Le mot de passe doit contenir entre 10 et 128 caractères.");
+  assertPasswordPolicy(password);
   const row = await findValidToken(token);
   if (!row) throw new DomainError("Lien invalide ou expiré. Demandez un nouveau lien à un administrateur.");
   const hash = await hashPassword(password);
@@ -126,14 +201,7 @@ export async function consumeToken(token: string, password: string): Promise<{ e
       data: { usedAt: new Date() },
     });
     if (claimed.count !== 1) throw new DomainError("Lien déjà utilisé.");
-    const account = await tx.account.findFirst({ where: { userId: row.userId, providerId: "credential" } });
-    if (account) {
-      await tx.account.update({ where: { id: account.id }, data: { password: hash } });
-    } else {
-      await tx.account.create({
-        data: { userId: row.userId, providerId: "credential", accountId: row.userId, password: hash },
-      });
-    }
+    await storeCredentialPassword(tx, row.userId, hash);
     await tx.session.deleteMany({ where: { userId: row.userId } });
     await tx.user.update({ where: { id: row.userId }, data: { emailVerified: true } });
   });

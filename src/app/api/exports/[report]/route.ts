@@ -8,6 +8,8 @@ import { agencyToday } from "@/server/services/common";
 import { buildReport, toCsv, type ReportTable } from "@/server/services/reports";
 import { recordAudit } from "@/server/audit";
 import { prisma } from "@/server/db";
+import { getLocale } from "@/lib/i18n/server";
+import { translateMessage } from "@/lib/i18n/translate";
 
 /**
  * Exports CSV : mêmes contrôles que l'écran (session + permission du rapport). Aucun champ
@@ -15,7 +17,9 @@ import { prisma } from "@/server/db";
  */
 export async function GET(request: NextRequest, ctx: RouteContext<"/api/exports/[report]">) {
   const actor = await getActor();
-  if (!actor) return NextResponse.json({ error: "Session expirée." }, { status: 401 });
+  const locale = await getLocale();
+  const tr = (text: string) => translateMessage(locale, text);
+  if (!actor) return NextResponse.json({ error: tr("Session expirée.") }, { status: 401 });
   const { report } = await ctx.params;
   const sp = request.nextUrl.searchParams;
   const today = await agencyToday();
@@ -46,7 +50,7 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/exports/
       table = await buildReport(actor, report, period);
     }
     await recordAudit(prisma, { actorId: actor.id, action: "export.csv", entityType: "Report", entityId: report, after: { from: period.from, to: period.to, rows: table.rows.length } });
-    return new NextResponse(toCsv(table), {
+    return new NextResponse(toCsv(table, { locale, tr }), {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
         "Content-Disposition": `attachment; filename="avencao-${report}-${period.from}_${period.to}.csv"`,
@@ -54,8 +58,8 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/exports/
       },
     });
   } catch (e) {
-    if (e instanceof ForbiddenError) return NextResponse.json({ error: "Accès refusé." }, { status: 403 });
+    if (e instanceof ForbiddenError) return NextResponse.json({ error: tr("Accès refusé.") }, { status: 403 });
     console.error("[export] échec", (e as Error).message);
-    return NextResponse.json({ error: "Export impossible." }, { status: 500 });
+    return NextResponse.json({ error: tr("Export impossible.") }, { status: 500 });
   }
 }

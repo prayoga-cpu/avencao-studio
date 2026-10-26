@@ -6,10 +6,15 @@ import { requirePagePermission } from "@/server/auth/session";
 import { prisma } from "@/server/db";
 import { clientOptions, projectOptions } from "@/server/queries/options";
 import { agencyToday } from "@/server/services/common";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Nouvelle vente" };
+export async function generateMetadata(): Promise<Metadata> {
+  const tr = await getT();
+  return { title: tr("Nouvelle vente") };
+}
 
 export default async function NewSalePage(props: PageProps<"/finances/ventes/nouvelle">) {
+  const tr = await getT();
   await requirePagePermission("sales.write");
   const params = await props.searchParams;
   const [clients, projects, videos, catalog, today] = await Promise.all([
@@ -23,7 +28,7 @@ export default async function NewSalePage(props: PageProps<"/finances/ventes/nou
   const project = projects.find((p) => p.value === projectId);
   return (
     <div className="mx-auto max-w-5xl">
-      <PageHeader title="Nouvelle vente acceptée" subtitle="Source unique des « Ventes signées ». La facture se saisit séparément et ne s'ajoute jamais à la vente." />
+      <PageHeader title={tr("Nouvelle vente acceptée")} subtitle={tr("Source unique des « Ventes signées ». La facture se saisit séparément et ne s'ajoute jamais à la vente.")} />
       <SalesOrderForm
         clients={clients}
         projects={projects}

@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { addNoteAction, deleteNoteAction } from "@/features/clients/actions";
 import { formatDateTime } from "@/lib/dates";
+import { useT } from "#i18n";
 
 export interface NoteItem {
   id: string;
@@ -37,6 +38,7 @@ export function NotesPanel({
   isAdmin: boolean;
   timezone: string;
 }) {
+  const tr = useT();
   const [body, setBody] = useState("");
   const [adminOnly, setAdminOnly] = useState(false);
   const { pending, run } = useAction();
@@ -61,53 +63,49 @@ export function NotesPanel({
         }}
       >
         <Label htmlFor="note-body" className="text-xs font-semibold text-subtle">
-          Nouvelle note interne
-        </Label>
-        <Textarea id="note-body" rows={3} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Échange, décision, information utile…" />
+          {tr("Nouvelle note interne")}</Label>
+        <Textarea id="note-body" rows={3} value={body} onChange={(e) => setBody(e.target.value)} placeholder={tr("Échange, décision, information utile…")} />
         <div className="flex flex-wrap items-center justify-between gap-2">
           {canAdminOnly ? (
             <div className="flex items-center gap-2">
               <Checkbox id="note-admin" checked={adminOnly} onCheckedChange={(v) => setAdminOnly(v === true)} />
               <Label htmlFor="note-admin" className="text-sm text-subtle">
-                Réservée aux administrateurs
-              </Label>
+                {tr("Réservée aux administrateurs")}</Label>
             </div>
           ) : (
             <span />
           )}
           <Button type="submit" size="sm" disabled={pending || body.trim().length === 0}>
             {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-            Ajouter la note
-          </Button>
+            {tr("Ajouter la note")}</Button>
         </div>
       </form>
       {notes.length === 0 ? (
-        <EmptyState title="Aucune note" description="Les notes ajoutées ici restent internes à l'agence." />
+        <EmptyState title={tr("Aucune note")} description={tr("Les notes ajoutées ici restent internes à l'agence.")} />
       ) : (
         <ol className="flex flex-col gap-3">
           {notes.map((n) => (
             <li key={n.id} className="rounded-xl border border-border bg-surface-2/50 p-3">
               <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-xs text-subtle">
                 <span>
-                  <span className="font-semibold text-foreground">{n.author?.name ?? "Utilisateur supprimé"}</span> · {formatDateTime(n.createdAt, timezone)}
-                  {n.legacySource ? <span className="ml-2 rounded bg-surface-3 px-1.5 py-0.5">Historique importé</span> : null}
+                  <span className="font-semibold text-foreground">{n.author?.name ?? tr("Utilisateur supprimé")}</span> · {formatDateTime(n.createdAt, timezone)}
+                  {n.legacySource ? <span className="ml-2 rounded bg-surface-3 px-1.5 py-0.5">{tr("Historique importé")}</span> : null}
                   {n.visibility === "ADMIN_ONLY" ? (
                     <span className="ml-2 inline-flex items-center gap-1 text-warning">
-                      <Lock className="size-3" aria-hidden /> Admin
-                    </span>
+                      <Lock className="size-3" aria-hidden /> {" "}{tr("Admin")}</span>
                   ) : null}
                 </span>
                 {!n.legacySource && (n.author?.id === currentUserId || isAdmin) ? (
                   <ConfirmAction
                     trigger={
-                      <Button variant="ghost" size="icon-sm" aria-label="Supprimer la note">
+                      <Button variant="ghost" size="icon-sm" aria-label={tr("Supprimer la note")}>
                         <Trash2 aria-hidden />
                       </Button>
                     }
-                    title="Supprimer cette note ?"
-                    description="La suppression est tracée dans le journal d'audit."
+                    title={tr("Supprimer cette note ?")}
+                    description={tr("La suppression est tracée dans le journal d'audit.")}
                     destructive
-                    confirmLabel="Supprimer"
+                    confirmLabel={tr("Supprimer")}
                     action={() => deleteNoteAction(n.id)}
                   />
                 ) : null}

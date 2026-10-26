@@ -12,9 +12,12 @@ import { LogoutButton } from "./logout-button";
 import { MobileNav } from "./mobile-nav";
 import { NAV_ITEMS } from "./nav-config";
 import { NavLinks } from "./nav-links";
+import { getT } from "@/lib/i18n/server";
+import { LanguageToggle } from "./language-toggle";
 
 /** Barre latérale (desktop ≈ 280 px) et barre supérieure mobile. Lit la session : rendue derrière <Suspense>. */
 export async function Sidebar() {
+  const tr = await getT();
   const actor = await getActor();
   if (!actor) redirect("/connexion");
   if (actor.role === "VISITOR" || actor.role === "CLIENT") redirect("/acces-refuse");
@@ -41,7 +44,7 @@ export async function Sidebar() {
         </div>
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">{actor.name}</p>
-          <p className="truncate text-xs font-bold text-warning">{ROLE_LABELS[actor.role]}</p>
+          <p className="truncate text-xs font-bold text-warning">{tr(ROLE_LABELS[actor.role])}</p>
         </div>
       </div>
       <div className="mt-3 flex items-center justify-between gap-2">
@@ -50,15 +53,17 @@ export async function Sidebar() {
           className="relative inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-subtle hover:bg-brand-soft hover:text-foreground"
         >
           <Bell className="size-4" aria-hidden />
-          Notifications
-          {unread > 0 ? (
+          {tr("Notifications")}{unread > 0 ? (
             <span className="num rounded-full bg-brand px-1.5 text-[0.7rem] font-bold text-white">
               {unread > 99 ? "99+" : unread}
-              <span className="sr-only"> non lues</span>
+              <span className="sr-only"> {" "}{tr("non lues")}</span>
             </span>
           ) : null}
         </Link>
-        <LogoutButton compact />
+        <div className="flex items-center gap-1">
+          <LanguageToggle />
+          <LogoutButton compact />
+        </div>
       </div>
     </div>
   );
@@ -72,10 +77,13 @@ export async function Sidebar() {
           <Image src={logoSrc} alt={settings.name} width={28} height={28} unoptimized={!!settings.logoAttachmentId} />
           <span className="text-sm font-bold">{settings.name}</span>
         </Link>
-        <Link href="/notifications" className="relative rounded-lg p-2" aria-label={`Notifications (${unread} non lues)`}>
-          <Bell className="size-5 text-subtle" aria-hidden />
-          {unread > 0 ? <span className="absolute right-1 top-1 size-2 rounded-full bg-brand" aria-hidden /> : null}
-        </Link>
+        <div className="flex items-center gap-1">
+          <LanguageToggle />
+          <Link href="/notifications" className="relative rounded-lg p-2" aria-label={tr("Notifications ({0} non lues)", [unread])}>
+            <Bell className="size-5 text-subtle" aria-hidden />
+            {unread > 0 ? <span className="absolute right-1 top-1 size-2 rounded-full bg-brand" aria-hidden /> : null}
+          </Link>
+        </div>
       </div>
 
       {/* Desktop */}

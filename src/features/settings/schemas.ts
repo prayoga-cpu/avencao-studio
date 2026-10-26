@@ -34,6 +34,12 @@ export const inviteSchema = z.object({
   role: z.enum(["ADMIN", "PRODUCTION_MANAGER", "EDITOR", "VISITOR"]),
   financeAccess: z.boolean(),
   editorId: zText(64),
+  // Vide : invitation par lien ; sinon compte actif immédiatement avec ce mot de passe.
+  password: z.string().max(128).refine((v) => v === "" || v.length >= 10, "10 caractères minimum"),
+});
+
+export const setPasswordSchema = z.object({
+  password: z.string().min(10, "10 caractères minimum").max(128),
 });
 export type InviteInput = z.input<typeof inviteSchema>;
 

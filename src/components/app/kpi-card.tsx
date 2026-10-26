@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { ArrowDownRight, ArrowUpRight, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "#i18n";
+import { trNode } from "@/lib/i18n/translate";
 
 export interface KpiCardProps {
   label: string;
@@ -16,6 +18,7 @@ export interface KpiCardProps {
 
 /** Carte KPI : valeur, base de calcul explicite, complétude et lien vers la liste filtrée. */
 export function KpiCard({ label, value, basis, href, delta, warning, className }: KpiCardProps) {
+  const tr = useT();
   const body = (
     <div
       className={cn(
@@ -25,7 +28,7 @@ export function KpiCard({ label, value, basis, href, delta, warning, className }
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-subtle">{label}</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-subtle">{trNode(tr, label)}</p>
         {href ? <ArrowUpRight className="size-4 text-faint transition-colors group-hover:text-brand" aria-hidden /> : null}
       </div>
       <div className="num text-2xl font-bold text-foreground">{value}</div>
@@ -38,10 +41,10 @@ export function KpiCard({ label, value, basis, href, delta, warning, className }
         >
           {delta.direction === "up" ? <ArrowUpRight className="size-3.5" aria-hidden /> : null}
           {delta.direction === "down" ? <ArrowDownRight className="size-3.5" aria-hidden /> : null}
-          {delta.label}
+          {tr(delta.label)}
         </p>
       ) : null}
-      <p className="mt-auto text-xs leading-relaxed text-faint">{basis}</p>
+      <p className="mt-auto text-xs leading-relaxed text-faint">{trNode(tr, basis)}</p>
       {warning ? (
         <p className="flex items-start gap-1.5 text-xs font-medium text-warning">
           <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
@@ -51,7 +54,7 @@ export function KpiCard({ label, value, basis, href, delta, warning, className }
     </div>
   );
   return href ? (
-    <Link href={href} className="block h-full rounded-xl focus-visible:outline-2" aria-label={`${label} — voir le détail`}>
+    <Link href={href} className="block h-full rounded-xl focus-visible:outline-2" aria-label={tr("{0} — voir le détail", [label])}>
       {body}
     </Link>
   ) : (

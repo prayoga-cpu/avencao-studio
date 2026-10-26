@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { NavIcon } from "./nav-config";
+import { useT } from "#i18n";
 
 const ICONS: Record<NavIcon, React.ComponentType<{ className?: string }>> = {
   dashboard: LayoutDashboard,
@@ -41,9 +42,10 @@ export function NavLinks({
   items: { href: string; label: string; icon: NavIcon }[];
   onNavigate?: () => void;
 }) {
+  const tr = useT();
   const pathname = usePathname();
   return (
-    <nav aria-label="Navigation principale">
+    <nav aria-label={tr("Navigation principale")}>
       <ul className="flex flex-col gap-1">
         {items.map((item) => {
           const Icon = ICONS[item.icon];
@@ -60,7 +62,7 @@ export function NavLinks({
                 )}
               >
                 <Icon className={cn("size-[18px] shrink-0", active ? "text-brand" : "text-subtle")} />
-                <span>{item.label}</span>
+                <span>{tr(item.label)}</span>
               </Link>
             </li>
           );

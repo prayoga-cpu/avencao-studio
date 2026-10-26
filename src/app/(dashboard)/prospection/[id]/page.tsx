@@ -18,10 +18,15 @@ import { can } from "@/server/policies";
 import { staffOptions } from "@/server/queries/options";
 import { agencyToday } from "@/server/services/common";
 import { getSettings } from "@/server/settings";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Opportunité" };
+export async function generateMetadata(): Promise<Metadata> {
+  const tr = await getT();
+  return { title: tr("Opportunité") };
+}
 
 export default async function OpportunityPage(props: PageProps<"/prospection/[id]">) {
+  const tr = await getT();
   const actor = await requirePagePermission("prospection.read");
   const { id } = await props.params;
   const [o, owners, clients, settings, today] = await Promise.all([
@@ -44,18 +49,17 @@ export default async function OpportunityPage(props: PageProps<"/prospection/[id
         actions={
           o.stage === "WON" && !o.project && can(actor, "projects.write") ? (
             <ActionButton variant="default" action={convertOpportunityAction.bind(null, o.id)}>
-              <FolderPlus aria-hidden /> Créer le projet
-            </ActionButton>
+              <FolderPlus aria-hidden /> {" "}{tr("Créer le projet")}</ActionButton>
           ) : o.project ? (
-            <Link className="text-sm text-brand hover:underline" href={`/projets/${o.project.id}`}>Projet {o.project.reference} — {o.project.title}</Link>
+            <Link className="text-sm text-brand hover:underline" href={`/projets/${o.project.id}`}>{tr("Projet")}{" "}{o.project.reference} — {o.project.title}</Link>
           ) : null
         }
       />
       {o.stage === "WON" && !o.project ? (
-        <Notice tone="info" className="mb-4">Opportunité gagnée : créez le projet. Aucune facture émise ni encaissement ne sera généré automatiquement ; la vente se saisit ensuite dans Finances.</Notice>
+        <Notice tone="info" className="mb-4">{tr("Opportunité gagnée : créez le projet. Aucune facture émise ni encaissement ne sera généré automatiquement ; la vente se saisit ensuite dans Finances.")}</Notice>
       ) : null}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-        <Section title="Détails" className="xl:col-span-2">
+        <Section title={tr("Détails")} className="xl:col-span-2">
           {can(actor, "prospection.write") ? (
             <OpportunityForm
               id={o.id}
@@ -69,15 +73,15 @@ export default async function OpportunityPage(props: PageProps<"/prospection/[id
               }}
             />
           ) : (
-            <p className="text-sm text-subtle">Lecture seule.</p>
+            <p className="text-sm text-subtle">{tr("Lecture seule.")}</p>
           )}
         </Section>
-        <Section title="Activités" description="Historisées, jamais supprimées.">
+        <Section title={tr("Activités")} description={tr("Historisées, jamais supprimées.")}>
           {can(actor, "prospection.write") ? <ActivityForm opportunityId={o.id} today={today} /> : null}
           <ol className="mt-4 flex flex-col gap-3 text-sm">
             {o.activities.map((a) => (
               <li key={a.id}>
-                <span className="text-xs text-faint">{formatDateTime(a.occurredAt, settings.timezone)} · {ACTIVITY_TYPE_LABELS[a.type]}{a.author ? ` · ${a.author.name}` : ""}</span>
+                <span className="text-xs text-faint">{formatDateTime(a.occurredAt, settings.timezone)} · {tr(ACTIVITY_TYPE_LABELS[a.type])}{a.author ? ` · ${a.author.name}` : ""}</span>
                 <p>{a.subject}</p>
                 {a.body ? <p className="whitespace-pre-wrap text-xs text-subtle">{a.body}</p> : null}
               </li>

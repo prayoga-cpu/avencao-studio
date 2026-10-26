@@ -14,8 +14,12 @@ import { requirePagePermission } from "@/server/auth/session";
 import { can } from "@/server/policies";
 import { clientOptions, editorOptions, projectOptions } from "@/server/queries/options";
 import { listVideos, type VideoView } from "@/server/queries/production";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Vidéos" };
+export async function generateMetadata(): Promise<Metadata> {
+  const tr = await getT();
+  return { title: tr("Vidéos") };
+}
 
 const VIEWS: { value: VideoView; label: string }[] = [
   { value: "tableau", label: "Tableau" },
@@ -28,6 +32,7 @@ const VIEWS: { value: VideoView; label: string }[] = [
 ];
 
 export default async function VideosPage(props: PageProps<"/videos">) {
+  const tr = await getT();
   const actor = await requirePagePermission("videos.readAll");
   const params = await props.searchParams;
   const view = (VIEWS.find((v) => v.value === params.vue)?.value ?? "tableau") as VideoView;
@@ -56,31 +61,31 @@ export default async function VideosPage(props: PageProps<"/videos">) {
   return (
     <>
       <PageHeader
-        title="Vidéos"
-        subtitle="Chaque vidéo est une unité livrable ; ses versions ne sont pas de nouvelles vidéos facturées."
-        actions={can(actor, "videos.write") ? <Button asChild><Link href="/videos/nouvelle"><Plus aria-hidden /> Nouvelle vidéo</Link></Button> : null}
+        title={tr("Vidéos")}
+        subtitle={tr("Chaque vidéo est une unité livrable ; ses versions ne sont pas de nouvelles vidéos facturées.")}
+        actions={can(actor, "videos.write") ? <Button asChild><Link href="/videos/nouvelle"><Plus aria-hidden /> {" "}{tr("Nouvelle vidéo")}</Link></Button> : null}
       >
         <FilterBar
-          searchPlaceholder="Titre ou référence…"
+          searchPlaceholder={tr("Titre ou référence…")}
           filters={[
-            { name: "client", label: "Client", options: clients },
-            { name: "projet", label: "Projet", options: projects.map((p) => ({ value: p.value, label: p.label })) },
-            { name: "monteur", label: "Monteur", options: editors },
-            { name: "type", label: "Type", options: enumOptions(VIDEO_TYPE_LABELS) },
-            { name: "statut", label: "Étape", options: enumOptions(VIDEO_STATUS) },
-            { name: "priorite", label: "Priorité", options: enumOptions(PRIORITY) },
+            { name: "client", label: tr("Client"), options: clients },
+            { name: "projet", label: tr("Projet"), options: projects.map((p) => ({ value: p.value, label: tr(p.label) })) },
+            { name: "monteur", label: tr("Monteur"), options: editors },
+            { name: "type", label: tr("Type"), options: enumOptions(VIDEO_TYPE_LABELS) },
+            { name: "statut", label: tr("Étape"), options: enumOptions(VIDEO_STATUS) },
+            { name: "priorite", label: tr("Priorité"), options: enumOptions(PRIORITY) },
           ]}
         />
       </PageHeader>
       <TabLinks tabs={VIEWS} active={view} basePath="/videos" param="vue" extraParams={keep} />
       {rows.length === 0 ? (
-        <EmptyState title="Aucune vidéo dans cette vue" description="Modifiez les filtres ou ajoutez des vidéos depuis un projet." />
+        <EmptyState title={tr("Aucune vidéo dans cette vue")} description={tr("Modifiez les filtres ou ajoutez des vidéos depuis un projet.")} />
       ) : view === "kanban" ? (
         <VideosKanban rows={rows} showCancelled={sp(params.statut) === "CANCELLED"} />
       ) : (
         <VideosTable rows={rows} showFinance={can(actor, "margins.project")} canBulk={can(actor, "videos.write")} />
       )}
-      {rows.length >= 500 ? <p className="mt-2 text-xs text-warning">Affichage limité à 500 vidéos : affinez les filtres.</p> : null}
+      {rows.length >= 500 ? <p className="mt-2 text-xs text-warning">{tr("Affichage limité à 500 vidéos : affinez les filtres.")}</p> : null}
     </>
   );
 }

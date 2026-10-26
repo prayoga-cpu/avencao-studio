@@ -13,15 +13,21 @@ import { can } from "@/server/policies";
 import { periodFromParams } from "@/server/period";
 import { REPORTS, buildReport, type ReportTable } from "@/server/services/reports";
 import { cn } from "@/lib/utils";
+import { useT } from "#i18n";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Rapports" };
+export async function generateMetadata(): Promise<Metadata> {
+  const tr = await getT();
+  return { title: tr("Rapports") };
+}
 
 export default async function ReportsPage(props: PageProps<"/rapports">) {
+  const tr = await getT();
   const actor = await requireActor();
   const params = await props.searchParams;
   const available = REPORTS.filter((r) => can(actor, r.perm));
   if (available.length === 0) redirect("/acces-refuse");
-  const tabs = [...available.map((r) => ({ value: r.key, label: r.label })), { value: "definitions", label: "Définitions" }];
+  const tabs = [...available.map((r) => ({ value: r.key, label: tr(r.label) })), { value: "definitions", label: tr("Définitions") }];
   const key = tabs.find((t) => t.value === params.rapport)?.value ?? tabs[0].value;
   const def = available.find((r) => r.key === key);
   const { period } = await periodFromParams(params);
@@ -31,8 +37,8 @@ export default async function ReportsPage(props: PageProps<"/rapports">) {
   const qs = new URLSearchParams({ du: period.from, au: period.to }).toString();
   return (
     <>
-      <PageHeader title="Rapports" subtitle="Chaque rapport indique sa date de référence. L'export CSV contient exactement les lignes affichées." actions={report ? <Button asChild size="sm" variant="outline"><a href={`/api/exports/${key}?${qs}`}><Download aria-hidden /> Export CSV</a></Button> : null}>
-        {def?.usesPeriod ? <PeriodFilter label={period.label} /> : null}
+      <PageHeader title={tr("Rapports")} subtitle={tr("Chaque rapport indique sa date de référence. L'export CSV contient exactement les lignes affichées.")} actions={report ? <Button asChild size="sm" variant="outline"><a href={`/api/exports/${key}?${qs}`}><Download aria-hidden /> {" "}{tr("Export CSV")}</a></Button> : null}>
+        {def?.usesPeriod ? <PeriodFilter label={tr(period.label)} /> : null}
       </PageHeader>
       <TabLinks tabs={tabs} active={key} basePath="/rapports" param="rapport" extraParams={keep} />
       {report ? <ReportView report={report} /> : <Definitions />}
@@ -41,22 +47,24 @@ export default async function ReportsPage(props: PageProps<"/rapports">) {
 }
 
 function ReportView({ report }: { report: ReportTable }) {
+  const tr = useT();
   const cell = (kind: string | undefined, v: string | null) =>
-    kind === "money" ? <Money value={v} empty="—" /> : kind === "percent" ? <Percent value={v} /> : (v ?? "—");
+    kind === "money" ? <Money value={v} empty="—" /> : kind === "percent" ? <Percent value={v} /> : (tr(v) ?? "—");
   return (
-    <Section title={report.title} description={`Date de référence : ${report.dateBasis}`}>
-      {report.notes?.map((n) => <p key={n} className="mb-2 text-xs text-subtle">{n}</p>)}
+    <Section title={report.title} description={tr("Date de référence : {0}", [report.dateBasis])}>
+      {report.notes?.map((n) => <p key={n} className="mb-2 text-xs text-subtle">{tr(n)}</p>)}
+      {report.summary ? <p className="mb-2 text-xs text-subtle">{tr("Synthèse : {0}", [report.summary.map((x) => `${tr(x.label)} ${x.amount} €`).join(" · ")])}</p> : null}
       {report.rows.length === 0 ? (
-        <EmptyState title="Aucune donnée pour cette période" description="Modifiez la période ou vérifiez que des livraisons, factures ou coûts existent." />
+        <EmptyState title={tr("Aucune donnée pour cette période")} description={tr("Modifiez la période ou vérifiez que des livraisons, factures ou coûts existent.")} />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-brand-border av-scroll">
           <table className="w-full min-w-[720px] text-sm">
-            <caption className="sr-only">{report.title}</caption>
+            <caption className="sr-only">{tr(report.title)}</caption>
             <thead>
               <tr className="bg-bordeaux">
                 {report.columns.map((c) => (
                   <th key={c.key} scope="col" className={cn("border-b border-brand-border px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-[#ffc2db]", c.kind && c.kind !== "text" && "text-right")}>
-                    {c.label}
+                    {tr(c.label)}
                   </th>
                 ))}
               </tr>
@@ -101,8 +109,9 @@ const DEFINITIONS: [string, string][] = [
 ];
 
 function Definitions() {
+  const tr = useT();
   return (
-    <Section title="Définitions des indicateurs" description="Ce CRM fournit des indicateurs de gestion et ne se présente pas comme un logiciel comptable certifié.">
+    <Section title={tr("Définitions des indicateurs")} description={tr("Ce CRM fournit des indicateurs de gestion et ne se présente pas comme un logiciel comptable certifié.")}>
       <dl className="flex flex-col gap-4">
         {DEFINITIONS.map(([t, d]) => (
           <div key={t}>

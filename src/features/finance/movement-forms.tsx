@@ -31,9 +31,16 @@ import {
   type ExpenseInput,
   type RetainerInput,
 } from "./schemas";
+import { useT } from "#i18n";
 
-const Methods = () => <>{Object.entries(PAYMENT_METHOD_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</>;
-const Currencies = () => <>{Object.entries(CURRENCY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</>;
+const Methods = () => {
+  const tr = useT();
+  return <>{Object.entries(PAYMENT_METHOD_LABELS).map(([v, l]) => <option key={v} value={v}>{tr(l)}</option>)}</>;
+};
+const Currencies = () => {
+  const tr = useT();
+  return <>{Object.entries(CURRENCY_LABELS).map(([v, l]) => <option key={v} value={v}>{tr(l)}</option>)}</>;
+};
 
 // ─────────────────────────── Encaissement client ───────────────────────────
 
@@ -46,6 +53,7 @@ export function ClientPaymentForm({
   clients: { value: string; label: string }[];
   openInvoices: { id: string; number: string; clientId: string; currency: string; dueDate: string | null; balance: string }[];
 }) {
+  const tr = useT();
   const router = useRouter();
   const { form, onSubmit, pending, err } = useServerForm({
     schema: clientPaymentSchema,
@@ -64,49 +72,48 @@ export function ClientPaymentForm({
   const invoices = openInvoices.filter((i) => i.clientId === clientId && i.currency === currency);
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-5" noValidate>
-      <Notice tone="info">Saisie d&apos;un encaissement déjà reçu (virement, carte, PayPal…). Aucun prélèvement n&apos;est déclenché.</Notice>
-      <FormSection title="Encaissement">
+      <Notice tone="info">{tr("Saisie d'un encaissement déjà reçu (virement, carte, PayPal…). Aucun prélèvement n'est déclenché.")}</Notice>
+      <FormSection title={tr("Encaissement")}>
         <FormGrid>
-          <Field label="Client" htmlFor="clientId" required error={err("clientId")}>
+          <Field label={tr("Client")} htmlFor="clientId" required error={err("clientId")}>
             <NativeSelect {...register("clientId", { onChange: () => allocs.replace([]) })}>
-              <option value="">— Choisir —</option>
-              {clients.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+              <option value="">{tr("— Choisir —")}</option>
+              {clients.map((c) => <option key={c.value} value={c.value}>{tr(c.label)}</option>)}
             </NativeSelect>
           </Field>
-          <Field label="Date de réception" htmlFor="receivedOn" required error={err("receivedOn")}><Input type="date" {...register("receivedOn")} /></Field>
-          <Field label="Montant reçu (TTC)" htmlFor="amount" required error={err("amount")}><Input inputMode="decimal" {...register("amount")} /></Field>
-          <Field label="Devise" htmlFor="currency"><NativeSelect {...register("currency", { onChange: () => allocs.replace([]) })}><Currencies /></NativeSelect></Field>
-          {currency !== "EUR" ? <Field label="Taux manuel (unités pour 1 €)" htmlFor="manualFxRate" error={err("manualFxRate")}><Input inputMode="decimal" {...register("manualFxRate")} /></Field> : null}
-          <Field label="Frais prélevés par l'intermédiaire" htmlFor="fees" error={err("fees")} hint="Ex. commission PayPal (même devise)."><Input inputMode="decimal" {...register("fees")} /></Field>
-          <Field label="Moyen" htmlFor="method"><NativeSelect {...register("method")}><Methods /></NativeSelect></Field>
-          <Field label="Référence" htmlFor="reference"><Input {...register("reference")} /></Field>
-          <Field label="Note" htmlFor="notes" className="md:col-span-2"><Input {...register("notes")} /></Field>
+          <Field label={tr("Date de réception")} htmlFor="receivedOn" required error={err("receivedOn")}><Input type="date" {...register("receivedOn")} /></Field>
+          <Field label={tr("Montant reçu (TTC)")} htmlFor="amount" required error={err("amount")}><Input inputMode="decimal" {...register("amount")} /></Field>
+          <Field label={tr("Devise")} htmlFor="currency"><NativeSelect {...register("currency", { onChange: () => allocs.replace([]) })}><Currencies /></NativeSelect></Field>
+          {currency !== "EUR" ? <Field label={tr("Taux manuel (unités pour 1 €)")} htmlFor="manualFxRate" error={err("manualFxRate")}><Input inputMode="decimal" {...register("manualFxRate")} /></Field> : null}
+          <Field label={tr("Frais prélevés par l'intermédiaire")} htmlFor="fees" error={err("fees")} hint={tr("Ex. commission PayPal (même devise).")}><Input inputMode="decimal" {...register("fees")} /></Field>
+          <Field label={tr("Moyen")} htmlFor="method"><NativeSelect {...register("method")}><Methods /></NativeSelect></Field>
+          <Field label={tr("Référence")} htmlFor="reference"><Input {...register("reference")} /></Field>
+          <Field label={tr("Note")} htmlFor="notes" className="md:col-span-2"><Input {...register("notes")} /></Field>
         </FormGrid>
       </FormSection>
-      <FormSection title="Affectation aux factures" description="Un paiement peut couvrir plusieurs factures. Le reliquat non affecté reste visible (crédit client).">
+      <FormSection title={tr("Affectation aux factures")} description={tr("Un paiement peut couvrir plusieurs factures. Le reliquat non affecté reste visible (crédit client).")}>
         {invoices.length === 0 ? (
-          <p className="text-sm text-subtle">{clientId ? "Aucune facture ouverte dans cette devise." : "Choisissez un client."}</p>
+          <p className="text-sm text-subtle">{clientId ? tr("Aucune facture ouverte dans cette devise.") : tr("Choisissez un client.")}</p>
         ) : (
           <>
             {allocs.fields.map((f, i) => (
               <div key={f.id} className="mb-2 grid gap-2 md:grid-cols-[3fr_1fr_auto] md:items-end">
-                <Field label="Facture" htmlFor={`a${i}-inv`} error={err(`allocations.${i}.invoiceId`)}>
+                <Field label={tr("Facture")} htmlFor={`a${i}-inv`} error={err(`allocations.${i}.invoiceId`)}>
                   <NativeSelect {...register(`allocations.${i}.invoiceId`)}>
                     <option value="">—</option>
-                    {invoices.map((inv) => <option key={inv.id} value={inv.id}>{inv.number} — solde {inv.balance} {inv.currency} — échéance {formatDateOnly(inv.dueDate)}</option>)}
+                    {invoices.map((inv) => <option key={inv.id} value={inv.id}>{inv.number} {" "}{tr("— solde")}{" "}{inv.balance} {inv.currency} {" "}{tr("— échéance")}{" "}{formatDateOnly(inv.dueDate)}</option>)}
                   </NativeSelect>
                 </Field>
-                <Field label="Montant affecté" htmlFor={`a${i}-amt`} error={err(`allocations.${i}.amount`)}><Input inputMode="decimal" {...register(`allocations.${i}.amount`)} /></Field>
-                <Button type="button" variant="ghost" size="icon" aria-label="Retirer" onClick={() => allocs.remove(i)}><Trash2 aria-hidden /></Button>
+                <Field label={tr("Montant affecté")} htmlFor={`a${i}-amt`} error={err(`allocations.${i}.amount`)}><Input inputMode="decimal" {...register(`allocations.${i}.amount`)} /></Field>
+                <Button type="button" variant="ghost" size="icon" aria-label={tr("Retirer")} onClick={() => allocs.remove(i)}><Trash2 aria-hidden /></Button>
               </div>
             ))}
             <Button type="button" size="sm" variant="outline" onClick={() => { const inv = invoices.find((x) => !allocs.fields.some((_, j) => watch(`allocations.${j}.invoiceId`) === x.id)); allocs.append({ invoiceId: inv?.id ?? "", amount: inv?.balance ?? "" }); }}>
-              <Plus aria-hidden /> Affecter à une facture
-            </Button>
+              <Plus aria-hidden /> {" "}{tr("Affecter à une facture")}</Button>
           </>
         )}
       </FormSection>
-      <FormActions pending={pending} submitLabel="Enregistrer l'encaissement" cancelHref="/finances?onglet=encaissements" />
+      <FormActions pending={pending} submitLabel={tr("Enregistrer l'encaissement")} cancelHref="/finances?onglet=encaissements" />
     </form>
   );
 }
@@ -122,6 +129,7 @@ export function SupplierPaymentForm({
   editors: { value: string; label: string }[];
   payable: { id: string; label: string; editorId: string; currency: string; reference: string | null; incurredOn: string; remaining: string }[];
 }) {
+  const tr = useT();
   const router = useRouter();
   const { form, onSubmit, pending, err } = useServerForm({
     schema: supplierPaymentSchema,
@@ -142,39 +150,39 @@ export function SupplierPaymentForm({
   const set = (next: { directCostId: string; amount: string }[]) => setValue("allocations", next, { shouldDirty: true });
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-5" noValidate>
-      <Notice tone="info">Saisie d&apos;un règlement déjà effectué. Aucun virement n&apos;est déclenché. Seuls les coûts <strong>validés</strong> sont réglables.</Notice>
-      <FormSection title="Règlement">
+      <Notice tone="info">{tr("Saisie d'un règlement déjà effectué. Aucun virement n'est déclenché. Seuls les coûts")}{" "}<strong>{tr("validés")}</strong> {" "}{tr("sont réglables.")}</Notice>
+      <FormSection title={tr("Règlement")}>
         <FormGrid>
-          <Field label="Prestataire" htmlFor="editorId" required error={err("editorId")}>
+          <Field label={tr("Prestataire")} htmlFor="editorId" required error={err("editorId")}>
             <NativeSelect {...register("editorId", { onChange: (e) => { set([]); const cur = payable.find((c) => c.editorId === e.target.value)?.currency; if (cur) setValue("currency", cur as "EUR"); } })}>
-              <option value="">— Choisir —</option>
-              {editors.map((e) => <option key={e.value} value={e.value}>{e.label}</option>)}
+              <option value="">{tr("— Choisir —")}</option>
+              {editors.map((e) => <option key={e.value} value={e.value}>{tr(e.label)}</option>)}
             </NativeSelect>
           </Field>
-          <Field label="Date du paiement" htmlFor="paidOn" required error={err("paidOn")}><Input type="date" {...register("paidOn")} /></Field>
-          <Field label="Devise" htmlFor="currency" hint={currenciesForEditor.length > 1 ? `Coûts dans plusieurs devises : ${currenciesForEditor.join(", ")}` : undefined}>
+          <Field label={tr("Date du paiement")} htmlFor="paidOn" required error={err("paidOn")}><Input type="date" {...register("paidOn")} /></Field>
+          <Field label={tr("Devise")} htmlFor="currency" hint={currenciesForEditor.length > 1 ? tr("Coûts dans plusieurs devises : {0}", [currenciesForEditor.join(", ")]) : undefined}>
             <NativeSelect {...register("currency", { onChange: () => set([]) })}><Currencies /></NativeSelect>
           </Field>
-          {currency !== "EUR" ? <Field label="Taux du jour (unités pour 1 €)" htmlFor="manualFxRate" error={err("manualFxRate")} hint="L'écart avec le taux d'engagement est conservé séparément."><Input inputMode="decimal" {...register("manualFxRate")} /></Field> : null}
-          <Field label="Frais bancaires" htmlFor="fees" error={err("fees")}><Input inputMode="decimal" {...register("fees")} /></Field>
-          <Field label="Moyen" htmlFor="method"><NativeSelect {...register("method")}><Methods /></NativeSelect></Field>
-          <Field label="Référence" htmlFor="reference"><Input {...register("reference")} /></Field>
-          <Field label="Note" htmlFor="notes"><Input {...register("notes")} /></Field>
+          {currency !== "EUR" ? <Field label={tr("Taux du jour (unités pour 1 €)")} htmlFor="manualFxRate" error={err("manualFxRate")} hint={tr("L'écart avec le taux d'engagement est conservé séparément.")}><Input inputMode="decimal" {...register("manualFxRate")} /></Field> : null}
+          <Field label={tr("Frais bancaires")} htmlFor="fees" error={err("fees")}><Input inputMode="decimal" {...register("fees")} /></Field>
+          <Field label={tr("Moyen")} htmlFor="method"><NativeSelect {...register("method")}><Methods /></NativeSelect></Field>
+          <Field label={tr("Référence")} htmlFor="reference"><Input {...register("reference")} /></Field>
+          <Field label={tr("Note")} htmlFor="notes"><Input {...register("notes")} /></Field>
         </FormGrid>
       </FormSection>
-      <FormSection title="Coûts couverts" description="Un paiement peut couvrir plusieurs missions ; paiement partiel possible.">
+      <FormSection title={tr("Coûts couverts")} description={tr("Un paiement peut couvrir plusieurs missions ; paiement partiel possible.")}>
         {err("allocations") ? <p className="mb-2 text-xs text-danger" role="alert">{err("allocations")}</p> : null}
         {costs.length === 0 ? (
-          <p className="text-sm text-subtle">{editorId ? "Aucun coût validé restant dû dans cette devise." : "Choisissez un prestataire."}</p>
+          <p className="text-sm text-subtle">{editorId ? tr("Aucun coût validé restant dû dans cette devise.") : tr("Choisissez un prestataire.")}</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {costs.map((c) => {
               const current = allocations.find((a) => a.directCostId === c.id);
               return (
                 <li key={c.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-border p-2.5 text-sm">
-                  <input type="checkbox" aria-label={`Régler ${c.label}`} className="accent-[var(--av-accent)]" checked={!!current} onChange={(e) => set(e.target.checked ? [...allocations, { directCostId: c.id, amount: c.remaining }] : allocations.filter((a) => a.directCostId !== c.id))} />
-                  <span className="min-w-0 flex-1">{c.label}<span className="block text-xs text-subtle">{formatDateOnly(c.incurredOn)} · reste dû <Money value={c.remaining} currency={c.currency as CurrencyCode} /></span></span>
-                  {current ? <Input aria-label={`Montant pour ${c.label}`} className="h-8 w-32" inputMode="decimal" value={current.amount} onChange={(e) => set(allocations.map((a) => (a.directCostId === c.id ? { ...a, amount: e.target.value } : a)))} /> : null}
+                  <input type="checkbox" aria-label={tr("Régler {0}", [c.label])} className="accent-[var(--av-accent)]" checked={!!current} onChange={(e) => set(e.target.checked ? [...allocations, { directCostId: c.id, amount: c.remaining }] : allocations.filter((a) => a.directCostId !== c.id))} />
+                  <span className="min-w-0 flex-1">{tr(c.label)}<span className="block text-xs text-subtle">{formatDateOnly(c.incurredOn)} {" "}{tr("· reste dû")}{" "}<Money value={c.remaining} currency={c.currency as CurrencyCode} /></span></span>
+                  {current ? <Input aria-label={tr("Montant pour {0}", [c.label])} className="h-8 w-32" inputMode="decimal" value={current.amount} onChange={(e) => set(allocations.map((a) => (a.directCostId === c.id ? { ...a, amount: e.target.value } : a)))} /> : null}
                 </li>
               );
             })}
@@ -182,12 +190,12 @@ export function SupplierPaymentForm({
         )}
         {allocations.length ? (
           <p className="mt-3 text-sm font-semibold">
-            Total réglé : <Money value={sum(allocations.map((a) => parseDecimalInput(a.amount) ?? new Decimal(0))).toFixed(2)} currency={currency as CurrencyCode} />{" "}
-            <span className="text-xs font-normal text-faint">(recalculé et contrôlé côté serveur)</span>
+            {tr("Total réglé :")}{" "}<Money value={sum(allocations.map((a) => parseDecimalInput(a.amount) ?? new Decimal(0))).toFixed(2)} currency={currency as CurrencyCode} />{" "}
+            <span className="text-xs font-normal text-faint">{tr("(recalculé et contrôlé côté serveur)")}</span>
           </p>
         ) : null}
       </FormSection>
-      <FormActions pending={pending} submitLabel="Enregistrer le règlement" cancelHref="/finances?onglet=reglements" />
+      <FormActions pending={pending} submitLabel={tr("Enregistrer le règlement")} cancelHref="/finances?onglet=reglements" />
     </form>
   );
 }
@@ -205,6 +213,7 @@ export function DirectCostForm({
   projects: { value: string; label: string }[];
   videos: { value: string; label: string; projectId: string }[];
 }) {
+  const tr = useT();
   const router = useRouter();
   const { form, onSubmit, pending, err } = useServerForm({
     schema: directCostSchema,
@@ -221,50 +230,50 @@ export function DirectCostForm({
   const projectId = watch("projectId");
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-5" noValidate>
-      <Notice tone="info">Coût direct = exclusivement affecté à une production (sous-traitance, achat, enveloppe). Une charge générale s&apos;enregistre dans « Charges » : jamais les deux pour la même dépense.</Notice>
-      <FormSection title="Coût">
+      <Notice tone="info">{tr("Coût direct = exclusivement affecté à une production (sous-traitance, achat, enveloppe). Une charge générale s'enregistre dans « Charges » : jamais les deux pour la même dépense.")}</Notice>
+      <FormSection title={tr("Coût")}>
         <FormGrid>
-          <Field label="Nature" htmlFor="kind">
+          <Field label={tr("Nature")} htmlFor="kind">
             <NativeSelect {...register("kind")}>
-              {(["PURCHASE", "ADDITIONAL", "ENVELOPE"] as const).map((k) => <option key={k} value={k}>{COST_KIND_LABELS[k]}</option>)}
+              {(["PURCHASE", "ADDITIONAL", "ENVELOPE"] as const).map((k) => <option key={k} value={k}>{tr(COST_KIND_LABELS[k])}</option>)}
             </NativeSelect>
           </Field>
-          <Field label="Libellé" htmlFor="label" required error={err("label")}><Input {...register("label")} /></Field>
+          <Field label={tr("Libellé")} htmlFor="label" required error={err("label")}><Input {...register("label")} /></Field>
           {kind === "ENVELOPE" || kind === "ADDITIONAL" ? (
-            <Field label="Prestataire" htmlFor="editorId" required={kind === "ENVELOPE"} error={err("editorId")}>
-              <NativeSelect {...register("editorId")}><option value="">—</option>{editors.map((e) => <option key={e.value} value={e.value}>{e.label}</option>)}</NativeSelect>
+            <Field label={tr("Prestataire")} htmlFor="editorId" required={kind === "ENVELOPE"} error={err("editorId")}>
+              <NativeSelect {...register("editorId")}><option value="">—</option>{editors.map((e) => <option key={e.value} value={e.value}>{tr(e.label)}</option>)}</NativeSelect>
             </Field>
           ) : (
-            <Field label="Fournisseur" htmlFor="supplierName"><Input {...register("supplierName")} /></Field>
+            <Field label={tr("Fournisseur")} htmlFor="supplierName"><Input {...register("supplierName")} /></Field>
           )}
           {kind === "ENVELOPE" ? (
-            <Field label="Mois couvert" htmlFor="periodMonth" required error={err("periodMonth")}><Input type="month" {...register("periodMonth")} /></Field>
+            <Field label={tr("Mois couvert")} htmlFor="periodMonth" required error={err("periodMonth")}><Input type="month" {...register("periodMonth")} /></Field>
           ) : (
             <>
-              <Field label="Projet" htmlFor="projectId" hint="Sans vidéo précise : réparti à parts égales entre les vidéos du projet (modifiable).">
-                <NativeSelect {...register("projectId")}><option value="">—</option>{projects.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</NativeSelect>
+              <Field label={tr("Projet")} htmlFor="projectId" hint={tr("Sans vidéo précise : réparti à parts égales entre les vidéos du projet (modifiable).")}>
+                <NativeSelect {...register("projectId")}><option value="">—</option>{projects.map((p) => <option key={p.value} value={p.value}>{tr(p.label)}</option>)}</NativeSelect>
               </Field>
-              <Field label="Vidéo" htmlFor="videoId">
-                <NativeSelect {...register("videoId")}><option value="">— (tout le projet)</option>{videos.filter((v) => !projectId || v.projectId === projectId).map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}</NativeSelect>
+              <Field label={tr("Vidéo")} htmlFor="videoId">
+                <NativeSelect {...register("videoId")}><option value="">{tr("— (tout le projet)")}</option>{videos.filter((v) => !projectId || v.projectId === projectId).map((v) => <option key={v.value} value={v.value}>{tr(v.label)}</option>)}</NativeSelect>
               </Field>
             </>
           )}
-          <Field label="Montant" htmlFor="amount" error={err("amount")} hint="Vide = « À renseigner » (marge provisoire)."><Input inputMode="decimal" {...register("amount")} /></Field>
-          <Field label="Devise" htmlFor="currency"><NativeSelect {...register("currency")}><Currencies /></NativeSelect></Field>
-          {watch("currency") !== "EUR" ? <Field label="Taux manuel (unités pour 1 €)" htmlFor="manualFxRate" error={err("manualFxRate")}><Input inputMode="decimal" {...register("manualFxRate")} /></Field> : null}
-          <Field label="Date d'engagement" htmlFor="incurredOn" required error={err("incurredOn")}><Input type="date" {...register("incurredOn")} /></Field>
-          <Field label="Étape" htmlFor="stage" hint="Estimé, engagé et validé sont les étapes d'un même coût.">
+          <Field label={tr("Montant")} htmlFor="amount" error={err("amount")} hint={tr("Vide = « À renseigner » (marge provisoire).")}><Input inputMode="decimal" {...register("amount")} /></Field>
+          <Field label={tr("Devise")} htmlFor="currency"><NativeSelect {...register("currency")}><Currencies /></NativeSelect></Field>
+          {watch("currency") !== "EUR" ? <Field label={tr("Taux manuel (unités pour 1 €)")} htmlFor="manualFxRate" error={err("manualFxRate")}><Input inputMode="decimal" {...register("manualFxRate")} /></Field> : null}
+          <Field label={tr("Date d'engagement")} htmlFor="incurredOn" required error={err("incurredOn")}><Input type="date" {...register("incurredOn")} /></Field>
+          <Field label={tr("Étape")} htmlFor="stage" hint={tr("Estimé, engagé et validé sont les étapes d'un même coût.")}>
             <NativeSelect {...register("stage")}>
-              <option value="ESTIMATED">Estimé</option>
-              <option value="COMMITTED">Engagé</option>
-              <option value="VALIDATED">Validé (payable)</option>
+              <option value="ESTIMATED">{tr("Estimé")}</option>
+              <option value="COMMITTED">{tr("Engagé")}</option>
+              <option value="VALIDATED">{tr("Validé (payable)")}</option>
             </NativeSelect>
           </Field>
-          <Field label="TVA non récupérable incluse" htmlFor="nonRecoverableVat" error={err("nonRecoverableVat")} hint="Ajoutée au coût si le réglage l'autorise."><Input inputMode="decimal" {...register("nonRecoverableVat")} /></Field>
-          <Field label="Notes" htmlFor="notes" className="md:col-span-2"><Input {...register("notes")} /></Field>
+          <Field label={tr("TVA non récupérable incluse")} htmlFor="nonRecoverableVat" error={err("nonRecoverableVat")} hint={tr("Ajoutée au coût si le réglage l'autorise.")}><Input inputMode="decimal" {...register("nonRecoverableVat")} /></Field>
+          <Field label={tr("Notes")} htmlFor="notes" className="md:col-span-2"><Input {...register("notes")} /></Field>
         </FormGrid>
       </FormSection>
-      <FormActions pending={pending} submitLabel="Enregistrer le coût" cancelHref="/finances?onglet=couts" />
+      <FormActions pending={pending} submitLabel={tr("Enregistrer le coût")} cancelHref="/finances?onglet=couts" />
     </form>
   );
 }
@@ -272,6 +281,7 @@ export function DirectCostForm({
 // ─────────────────────────── Charge de structure ───────────────────────────
 
 export function ExpenseForm({ defaults, categories }: { defaults: ExpenseInput; categories: { value: string; label: string }[] }) {
+  const tr = useT();
   const router = useRouter();
   const { form, onSubmit, pending, err } = useServerForm({
     schema: expenseSchema,
@@ -286,33 +296,31 @@ export function ExpenseForm({ defaults, categories }: { defaults: ExpenseInput; 
   const { register, watch } = form;
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-5" noValidate>
-      <FormSection title="Charge de structure" description="Abonnements, stockage, musique, publicité, services administratifs, frais bancaires…">
+      <FormSection title={tr("Charge de structure")} description={tr("Abonnements, stockage, musique, publicité, services administratifs, frais bancaires…")}>
         <FormGrid>
-          <Field label="Catégorie" htmlFor="categoryId" required error={err("categoryId")}>
-            <NativeSelect {...register("categoryId")}><option value="">— Choisir —</option>{categories.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</NativeSelect>
+          <Field label={tr("Catégorie")} htmlFor="categoryId" required error={err("categoryId")}>
+            <NativeSelect {...register("categoryId")}><option value="">{tr("— Choisir —")}</option>{categories.map((c) => <option key={c.value} value={c.value}>{tr(c.label)}</option>)}</NativeSelect>
           </Field>
-          <Field label="Libellé" htmlFor="label" required error={err("label")}><Input {...register("label")} /></Field>
-          <Field label="Fournisseur" htmlFor="supplier"><Input {...register("supplier")} /></Field>
-          <Field label="Date de dépense" htmlFor="expenseDate" required error={err("expenseDate")}><Input type="date" {...register("expenseDate")} /></Field>
-          <Field label="Période de rattachement" htmlFor="periodMonth" required error={err("periodMonth")} hint="Mois auquel la charge est rattachée dans le résultat."><Input type="month" {...register("periodMonth")} /></Field>
-          <Field label="Récurrence" htmlFor="recurrence"><NativeSelect {...register("recurrence")}>{Object.entries(RECURRENCE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</NativeSelect></Field>
-          <Field label="Montant HT" htmlFor="amountNet" required error={err("amountNet")}><Input inputMode="decimal" {...register("amountNet")} /></Field>
-          <Field label="TVA" htmlFor="vatAmount" error={err("vatAmount")}><Input inputMode="decimal" {...register("vatAmount")} /></Field>
-          <Field label="Devise" htmlFor="currency"><NativeSelect {...register("currency")}><Currencies /></NativeSelect></Field>
-          {watch("currency") !== "EUR" ? <Field label="Taux manuel (unités pour 1 €)" htmlFor="manualFxRate" error={err("manualFxRate")}><Input inputMode="decimal" {...register("manualFxRate")} /></Field> : null}
+          <Field label={tr("Libellé")} htmlFor="label" required error={err("label")}><Input {...register("label")} /></Field>
+          <Field label={tr("Fournisseur")} htmlFor="supplier"><Input {...register("supplier")} /></Field>
+          <Field label={tr("Date de dépense")} htmlFor="expenseDate" required error={err("expenseDate")}><Input type="date" {...register("expenseDate")} /></Field>
+          <Field label={tr("Période de rattachement")} htmlFor="periodMonth" required error={err("periodMonth")} hint={tr("Mois auquel la charge est rattachée dans le résultat.")}><Input type="month" {...register("periodMonth")} /></Field>
+          <Field label={tr("Récurrence")} htmlFor="recurrence"><NativeSelect {...register("recurrence")}>{Object.entries(RECURRENCE_LABELS).map(([v, l]) => <option key={v} value={v}>{tr(l)}</option>)}</NativeSelect></Field>
+          <Field label={tr("Montant HT")} htmlFor="amountNet" required error={err("amountNet")}><Input inputMode="decimal" {...register("amountNet")} /></Field>
+          <Field label={tr("TVA")} htmlFor="vatAmount" error={err("vatAmount")}><Input inputMode="decimal" {...register("vatAmount")} /></Field>
+          <Field label={tr("Devise")} htmlFor="currency"><NativeSelect {...register("currency")}><Currencies /></NativeSelect></Field>
+          {watch("currency") !== "EUR" ? <Field label={tr("Taux manuel (unités pour 1 €)")} htmlFor="manualFxRate" error={err("manualFxRate")}><Input inputMode="decimal" {...register("manualFxRate")} /></Field> : null}
           <label className="flex items-center gap-2 text-sm md:col-span-2">
             <input type="checkbox" {...register("vatRecoverable")} className="accent-[var(--av-accent)]" />
-            TVA récupérable (sinon intégrée au coût selon le paramétrage)
-          </label>
+            {tr("TVA récupérable (sinon intégrée au coût selon le paramétrage)")}</label>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" {...register("isPaid")} className="accent-[var(--av-accent)]" />
-            Déjà payée
-          </label>
-          {watch("isPaid") ? <Field label="Date de paiement" htmlFor="paidOn" error={err("paidOn")}><Input type="date" {...register("paidOn")} /></Field> : null}
-          <Field label="Notes" htmlFor="notes" className="md:col-span-2"><Input {...register("notes")} /></Field>
+            {tr("Déjà payée")}</label>
+          {watch("isPaid") ? <Field label={tr("Date de paiement")} htmlFor="paidOn" error={err("paidOn")}><Input type="date" {...register("paidOn")} /></Field> : null}
+          <Field label={tr("Notes")} htmlFor="notes" className="md:col-span-2"><Input {...register("notes")} /></Field>
         </FormGrid>
       </FormSection>
-      <FormActions pending={pending} submitLabel="Enregistrer la charge" cancelHref="/finances?onglet=charges" />
+      <FormActions pending={pending} submitLabel={tr("Enregistrer la charge")} cancelHref="/finances?onglet=charges" />
     </form>
   );
 }
@@ -320,6 +328,7 @@ export function ExpenseForm({ defaults, categories }: { defaults: ExpenseInput; 
 // ─────────────────────────── Forfait récurrent ───────────────────────────
 
 export function RetainerForm({ defaults, clients }: { defaults: RetainerInput; clients: { value: string; label: string }[] }) {
+  const tr = useT();
   const router = useRouter();
   const { form, onSubmit, pending, err } = useServerForm({
     schema: retainerSchema,
@@ -335,36 +344,35 @@ export function RetainerForm({ defaults, clients }: { defaults: RetainerInput; c
   const quotas = useFieldArray({ control, name: "quotas" });
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-5" noValidate>
-      <FormSection title="Contrat récurrent" description="Les crédits de production sont distincts des encaissements.">
+      <FormSection title={tr("Contrat récurrent")} description={tr("Les crédits de production sont distincts des encaissements.")}>
         <FormGrid>
-          <Field label="Client" htmlFor="clientId" required error={err("clientId")}>
-            <NativeSelect {...register("clientId")}><option value="">— Choisir —</option>{clients.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</NativeSelect>
+          <Field label={tr("Client")} htmlFor="clientId" required error={err("clientId")}>
+            <NativeSelect {...register("clientId")}><option value="">{tr("— Choisir —")}</option>{clients.map((c) => <option key={c.value} value={c.value}>{tr(c.label)}</option>)}</NativeSelect>
           </Field>
-          <Field label="Intitulé" htmlFor="title" required error={err("title")}><Input {...register("title")} /></Field>
-          <Field label="Date d'effet" htmlFor="startsOn" required error={err("startsOn")}><Input type="date" {...register("startsOn")} /></Field>
-          <Field label="Fin" htmlFor="endsOn" error={err("endsOn")}><Input type="date" {...register("endsOn")} /></Field>
-          <Field label="Montant mensuel HT" htmlFor="amount" required error={err("amount")}><Input inputMode="decimal" {...register("amount")} /></Field>
-          <Field label="Devise" htmlFor="currency"><NativeSelect {...register("currency")}><Currencies /></NativeSelect></Field>
-          <Field label="Report des crédits" htmlFor="carryOver"><NativeSelect {...register("carryOver")}>{Object.entries(CARRY_OVER_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</NativeSelect></Field>
-          <Field label="TVA de la facture brouillon (%)" htmlFor="vatRate" error={err("vatRate")}><Input inputMode="decimal" {...register("vatRate")} /></Field>
+          <Field label={tr("Intitulé")} htmlFor="title" required error={err("title")}><Input {...register("title")} /></Field>
+          <Field label={tr("Date d'effet")} htmlFor="startsOn" required error={err("startsOn")}><Input type="date" {...register("startsOn")} /></Field>
+          <Field label={tr("Fin")} htmlFor="endsOn" error={err("endsOn")}><Input type="date" {...register("endsOn")} /></Field>
+          <Field label={tr("Montant mensuel HT")} htmlFor="amount" required error={err("amount")}><Input inputMode="decimal" {...register("amount")} /></Field>
+          <Field label={tr("Devise")} htmlFor="currency"><NativeSelect {...register("currency")}><Currencies /></NativeSelect></Field>
+          <Field label={tr("Report des crédits")} htmlFor="carryOver"><NativeSelect {...register("carryOver")}>{Object.entries(CARRY_OVER_LABELS).map(([v, l]) => <option key={v} value={v}>{tr(l)}</option>)}</NativeSelect></Field>
+          <Field label={tr("TVA de la facture brouillon (%)")} htmlFor="vatRate" error={err("vatRate")}><Input inputMode="decimal" {...register("vatRate")} /></Field>
           <label className="flex items-center gap-2 text-sm md:col-span-2">
             <input type="checkbox" {...register("createDraftInvoice")} className="accent-[var(--av-accent)]" />
-            Créer une facture brouillon à chaque période (à émettre dans votre outil)
-          </label>
-          <Field label="Notes" htmlFor="notes" className="md:col-span-2"><Textarea rows={2} {...register("notes")} /></Field>
+            {tr("Créer une facture brouillon à chaque période (à émettre dans votre outil)")}</label>
+          <Field label={tr("Notes")} htmlFor="notes" className="md:col-span-2"><Textarea rows={2} {...register("notes")} /></Field>
         </FormGrid>
       </FormSection>
-      <FormSection title="Quotas mensuels">
+      <FormSection title={tr("Quotas mensuels")}>
         {quotas.fields.map((f, i) => (
           <div key={f.id} className="mb-2 grid grid-cols-[2fr_1fr_auto] items-end gap-2">
-            <Field label="Type" htmlFor={`q${i}-t`}><NativeSelect {...register(`quotas.${i}.videoType`)}>{Object.entries(VIDEO_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</NativeSelect></Field>
-            <Field label="Quantité" htmlFor={`q${i}-n`} error={err(`quotas.${i}.quantity`)}><Input inputMode="numeric" {...register(`quotas.${i}.quantity`)} /></Field>
-            <Button type="button" variant="ghost" size="icon" aria-label="Retirer" onClick={() => quotas.remove(i)} disabled={quotas.fields.length === 1}><Trash2 aria-hidden /></Button>
+            <Field label={tr("Type")} htmlFor={`q${i}-t`}><NativeSelect {...register(`quotas.${i}.videoType`)}>{Object.entries(VIDEO_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{tr(l)}</option>)}</NativeSelect></Field>
+            <Field label={tr("Quantité")} htmlFor={`q${i}-n`} error={err(`quotas.${i}.quantity`)}><Input inputMode="numeric" {...register(`quotas.${i}.quantity`)} /></Field>
+            <Button type="button" variant="ghost" size="icon" aria-label={tr("Retirer")} onClick={() => quotas.remove(i)} disabled={quotas.fields.length === 1}><Trash2 aria-hidden /></Button>
           </div>
         ))}
-        <Button type="button" size="sm" variant="outline" onClick={() => quotas.append({ videoType: "REEL", quantity: "" })}><Plus aria-hidden /> Quota</Button>
+        <Button type="button" size="sm" variant="outline" onClick={() => quotas.append({ videoType: "REEL", quantity: "" })}><Plus aria-hidden /> {" "}{tr("Quota")}</Button>
       </FormSection>
-      <FormActions pending={pending} submitLabel="Créer le forfait" cancelHref="/finances?onglet=forfaits" />
+      <FormActions pending={pending} submitLabel={tr("Créer le forfait")} cancelHref="/finances?onglet=forfaits" />
     </form>
   );
 }

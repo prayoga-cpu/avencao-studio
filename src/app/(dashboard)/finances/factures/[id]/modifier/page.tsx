@@ -6,10 +6,15 @@ import { toDateOnlyString } from "@/lib/dates";
 import { requirePagePermission } from "@/server/auth/session";
 import { prisma } from "@/server/db";
 import { invoiceFormData } from "@/server/queries/finance-forms";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Modifier le brouillon" };
+export async function generateMetadata(): Promise<Metadata> {
+  const tr = await getT();
+  return { title: tr("Modifier le brouillon") };
+}
 
 export default async function EditInvoicePage(props: PageProps<"/finances/factures/[id]/modifier">) {
+  const tr = await getT();
   await requirePagePermission("invoices.write");
   const { id } = await props.params;
   const inv = await prisma.invoice.findUnique({ where: { id }, include: { lines: { orderBy: { position: "asc" } } } });
@@ -18,7 +23,7 @@ export default async function EditInvoicePage(props: PageProps<"/finances/factur
   const data = await invoiceFormData();
   return (
     <div className="mx-auto max-w-5xl">
-      <PageHeader title="Modifier le brouillon" subtitle="Seuls les brouillons sont modifiables. Une facture émise se corrige par un avoir." />
+      <PageHeader title={tr("Modifier le brouillon")} subtitle={tr("Seuls les brouillons sont modifiables. Une facture émise se corrige par un avoir.")} />
       <InvoiceForm
         invoiceId={inv.id}
         {...data}

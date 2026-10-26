@@ -12,15 +12,20 @@ import { dec, sum, type CurrencyCode } from "@/lib/money";
 import { requireActor } from "@/server/auth/session";
 import { prisma } from "@/server/db";
 import { can } from "@/server/policies";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Mes règlements" };
+export async function generateMetadata(): Promise<Metadata> {
+  const tr = await getT();
+  return { title: tr("Mes règlements") };
+}
 
 /** Rémunération du monteur connecté uniquement : ses coûts, ses paiements, ses justificatifs. */
 export default async function MyPaymentsPage() {
+  const tr = await getT();
   const actor = await requireActor();
   if (!can(actor, "earnings.own")) redirect("/");
   if (!actor.editorId) {
-    return <EmptyState title="Compte non relié à une fiche prestataire" />;
+    return <EmptyState title={tr("Compte non relié à une fiche prestataire")} />;
   }
   const [costs, payments] = await Promise.all([
     prisma.directCost.findMany({
@@ -52,43 +57,43 @@ export default async function MyPaymentsPage() {
   }
   return (
     <>
-      <PageHeader title="Mes règlements" subtitle="Montants engagés, validés et payés pour vos missions. Aucun virement n'est déclenché depuis le CRM." />
+      <PageHeader title={tr("Mes règlements")} subtitle={tr("Montants engagés, validés et payés pour vos missions. Aucun virement n'est déclenché depuis le CRM.")} />
       <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
         {[...byCurrency.entries()].map(([cur, v]) => (
           <div key={cur} className="rounded-xl border border-brand-border bg-surface p-4">
-            <p className="text-xs uppercase text-subtle">Reste dû ({cur})</p>
+            <p className="text-xs uppercase text-subtle">{tr("Reste dû (")}{cur})</p>
             <p className="mt-1 text-xl font-bold"><Money value={v.due} currency={cur as CurrencyCode} /></p>
-            <p className="text-xs text-faint">dont validé : <Money value={v.validated} currency={cur as CurrencyCode} /></p>
+            <p className="text-xs text-faint">{tr("dont validé :")}{" "}<Money value={v.validated} currency={cur as CurrencyCode} /></p>
           </div>
         ))}
       </div>
-      <Section title="Missions et rémunération" className="mb-5">
+      <Section title={tr("Missions et rémunération")} className="mb-5">
         <DataTable
           rows={rows}
           rowKey={(r) => r.id}
-          empty={<EmptyState title="Aucune rémunération enregistrée" />}
+          empty={<EmptyState title={tr("Aucune rémunération enregistrée")} />}
           columns={[
-            { key: "l", header: "Mission", cell: (r) => (r.video ? `${r.video.reference} — ${r.video.title}` : r.label) },
-            { key: "d", header: "Date", cell: (r) => formatDateOnly(r.incurredOn) },
-            { key: "s", header: "Étape", cell: (r) => <StatusBadge {...COST_STAGE[r.stage]} /> },
-            { key: "a", header: "Montant", numeric: true, cell: (r) => <Money value={r.amount?.toFixed(2) ?? null} currency={r.currency as CurrencyCode} empty="à renseigner" /> },
-            { key: "p", header: "Payé", numeric: true, cell: (r) => <Money value={r.paid} currency={r.currency as CurrencyCode} /> },
-            { key: "r", header: "Reste", numeric: true, cell: (r) => <Money value={r.due} currency={r.currency as CurrencyCode} empty="—" /> },
+            { key: "l", header: tr("Mission"), cell: (r) => (r.video ? `${r.video.reference} — ${r.video.title}` : r.label) },
+            { key: "d", header: tr("Date"), cell: (r) => formatDateOnly(r.incurredOn) },
+            { key: "s", header: tr("Étape"), cell: (r) => <StatusBadge {...COST_STAGE[r.stage]} /> },
+            { key: "a", header: tr("Montant"), numeric: true, cell: (r) => <Money value={r.amount?.toFixed(2) ?? null} currency={r.currency as CurrencyCode} empty={tr("à renseigner")} /> },
+            { key: "p", header: tr("Payé"), numeric: true, cell: (r) => <Money value={r.paid} currency={r.currency as CurrencyCode} /> },
+            { key: "r", header: tr("Reste"), numeric: true, cell: (r) => <Money value={r.due} currency={r.currency as CurrencyCode} empty="—" /> },
           ]}
         />
       </Section>
-      <Section title="Paiements reçus">
+      <Section title={tr("Paiements reçus")}>
         <DataTable
           rows={payments}
           rowKey={(p) => p.id}
-          empty={<p className="text-sm text-subtle">Aucun paiement enregistré.</p>}
+          empty={<p className="text-sm text-subtle">{tr("Aucun paiement enregistré.")}</p>}
           columns={[
-            { key: "d", header: "Date", cell: (p) => formatDateOnly(p.paidOn) },
-            { key: "m", header: "Moyen", cell: (p) => PAYMENT_METHOD_LABELS[p.method] },
-            { key: "r", header: "Référence", cell: (p) => p.reference ?? "—" },
-            { key: "n", header: "Missions couvertes", numeric: true, cell: (p) => p.allocations.length },
-            { key: "a", header: "Montant", numeric: true, cell: (p) => <Money value={p.amount.toFixed(2)} currency={p.currency as CurrencyCode} /> },
-            { key: "j", header: "Justificatif", cell: (p) => (p.proofAttachmentId ? <a className="text-brand hover:underline" href={`/api/files/${p.proofAttachmentId}`} target="_blank" rel="noreferrer">Ouvrir</a> : "—") },
+            { key: "d", header: tr("Date"), cell: (p) => formatDateOnly(p.paidOn) },
+            { key: "m", header: tr("Moyen"), cell: (p) => tr(PAYMENT_METHOD_LABELS[p.method]) },
+            { key: "r", header: tr("Référence"), cell: (p) => p.reference ?? "—" },
+            { key: "n", header: tr("Missions couvertes"), numeric: true, cell: (p) => p.allocations.length },
+            { key: "a", header: tr("Montant"), numeric: true, cell: (p) => <Money value={p.amount.toFixed(2)} currency={p.currency as CurrencyCode} /> },
+            { key: "j", header: tr("Justificatif"), cell: (p) => (p.proofAttachmentId ? <a className="text-brand hover:underline" href={`/api/files/${p.proofAttachmentId}`} target="_blank" rel="noreferrer">{tr("Ouvrir")}</a> : "—") },
           ]}
         />
       </Section>

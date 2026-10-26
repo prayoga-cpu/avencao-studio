@@ -4,15 +4,16 @@
  * accepte les chaînes numériques et conserve leur précision.
  */
 import type { CurrencyCode } from "./money";
+import { INTL_LOCALE, type Locale } from "./i18n/locales";
 
 const DECIMALS: Record<CurrencyCode, number> = { EUR: 2, USD: 2, IDR: 0 };
 const cache = new Map<string, Intl.NumberFormat>();
 
-function formatter(currency: CurrencyCode, compact = false): Intl.NumberFormat {
-  const key = `${currency}-${compact}`;
+function formatter(currency: CurrencyCode, compact = false, locale: Locale = "fr"): Intl.NumberFormat {
+  const key = `${currency}-${compact}-${locale}`;
   let f = cache.get(key);
   if (!f) {
-    f = new Intl.NumberFormat("fr-FR", {
+    f = new Intl.NumberFormat(INTL_LOCALE[locale], {
       style: "currency",
       currency,
       minimumFractionDigits: compact ? 0 : DECIMALS[currency],
@@ -29,18 +30,22 @@ type NumericString = `${number}` | string;
 export function formatMoney(
   amount: NumericString | null | undefined,
   currency: CurrencyCode = "EUR",
-  options: { compact?: boolean; empty?: string } = {},
+  options: { compact?: boolean; empty?: string; locale?: Locale } = {},
 ): string {
-  if (amount === null || amount === undefined || amount === "") return options.empty ?? "À renseigner";
-  return formatter(currency, options.compact).format(amount as unknown as number);
+  if (amount === null || amount === undefined || amount === "") return options.empty ?? (options.locale === "en" ? "To be entered" : "À renseigner");
+  return formatter(currency, options.compact, options.locale).format(amount as unknown as number);
 }
 
-const pctFormatter = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+const pctFormatters: Record<Locale, Intl.NumberFormat> = {
+  fr: new Intl.NumberFormat(INTL_LOCALE.fr, { minimumFractionDigits: 1, maximumFractionDigits: 2 }),
+  en: new Intl.NumberFormat(INTL_LOCALE.en, { minimumFractionDigits: 1, maximumFractionDigits: 2 }),
+};
 
-/** « 56.67 » → « 56,67 % ». null → « non calculable ». */
-export function formatPercent(value: NumericString | null | undefined, empty = "non calculable"): string {
-  if (value === null || value === undefined || value === "") return empty;
-  return `${pctFormatter.format(value as unknown as number)} %`;
+/** « 56.67 » → « 56,67 % » (fr) ou « 56.67% » (en). null → « non calculable ». */
+export function formatPercent(value: NumericString | null | undefined, empty?: string, locale: Locale = "fr"): string {
+  if (value === null || value === undefined || value === "") return empty ?? (locale === "en" ? "not computable" : "non calculable");
+  const n = pctFormatters[locale].format(value as unknown as number);
+  return locale === "en" ? `${n}%` : `${n} %`;
 }
 
 const numberFormatter = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 3 });

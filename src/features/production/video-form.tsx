@@ -8,8 +8,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { PRIORITY, VIDEO_TYPE_LABELS } from "@/lib/labels";
 import { createVideoAction, updateVideoAction } from "./actions";
 import { RATIOS, videoSchema, type VideoInput } from "./schemas";
+import { useT } from "#i18n";
 
 export function VideoForm({ videoId, defaults, projects, hasDeadline }: { videoId?: string; defaults: VideoInput; projects: { value: string; label: string }[]; hasDeadline?: boolean }) {
+  const tr = useT();
   const router = useRouter();
   const { form, onSubmit, pending, err } = useServerForm({
     schema: videoSchema,
@@ -24,74 +26,74 @@ export function VideoForm({ videoId, defaults, projects, hasDeadline }: { videoI
   const { register } = form;
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-5" noValidate>
-      <FormSection title="Livrable">
+      <FormSection title={tr("Livrable")}>
         <FormGrid>
-          <Field label="Projet" htmlFor="projectId" required error={err("projectId")}>
+          <Field label={tr("Projet")} htmlFor="projectId" required error={err("projectId")}>
             <NativeSelect {...register("projectId")}>
-              <option value="">— Choisir —</option>
-              {projects.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+              <option value="">{tr("— Choisir —")}</option>
+              {projects.map((p) => <option key={p.value} value={p.value}>{tr(p.label)}</option>)}
             </NativeSelect>
           </Field>
-          <Field label="Titre" htmlFor="title" required error={err("title")} hint="La référence stable (AV-AAAA-NNNN) ne change jamais.">
+          <Field label={tr("Titre")} htmlFor="title" required error={err("title")} hint={tr("La référence stable (AV-AAAA-NNNN) ne change jamais.")}>
             <Input {...register("title")} />
           </Field>
-          <Field label="Type" htmlFor="type">
+          <Field label={tr("Type")} htmlFor="type">
             <NativeSelect {...register("type")}>
-              {Object.entries(VIDEO_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              {Object.entries(VIDEO_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{tr(l)}</option>)}
             </NativeSelect>
           </Field>
-          <Field label="Priorité" htmlFor="priority">
+          <Field label={tr("Priorité")} htmlFor="priority">
             <NativeSelect {...register("priority")}>
-              {Object.entries(PRIORITY).map(([v, s]) => <option key={v} value={v}>{s.label}</option>)}
+              {Object.entries(PRIORITY).map(([v, s]) => <option key={v} value={v}>{tr(s.label)}</option>)}
             </NativeSelect>
           </Field>
-          <Field label="Ratio" htmlFor="ratio">
+          <Field label={tr("Ratio")} htmlFor="ratio">
             <NativeSelect {...register("ratio")}>
               <option value="">—</option>
               {RATIOS.map((r) => <option key={r} value={r}>{r}</option>)}
             </NativeSelect>
           </Field>
-          <Field label="Format / résolution" htmlFor="format"><Input {...register("format")} placeholder="1080x1920" /></Field>
-          <Field label="Langue" htmlFor="language"><Input {...register("language")} /></Field>
-          <Field label="Heures de travail estimées" htmlFor="estimatedHours" error={err("estimatedHours")} hint="Sert à la planification (distinct des durées médias).">
+          <Field label={tr("Format / résolution")} htmlFor="format"><Input {...register("format")} placeholder="1080x1920" /></Field>
+          <Field label={tr("Langue")} htmlFor="language"><Input {...register("language")} /></Field>
+          <Field label={tr("Heures de travail estimées")} htmlFor="estimatedHours" error={err("estimatedHours")} hint={tr("Sert à la planification (distinct des durées médias).")}>
             <Input inputMode="decimal" {...register("estimatedHours")} />
           </Field>
         </FormGrid>
       </FormSection>
-      <FormSection title="Durées médias" description="Format « mm:ss » ou secondes.">
+      <FormSection title={tr("Durées médias")} description={tr("Format « mm:ss » ou secondes.")}>
         <FormGrid className="md:grid-cols-3">
-          <Field label="Durée des rushs" htmlFor="rushDuration" error={err("rushDuration")}><Input {...register("rushDuration")} placeholder="45:00" /></Field>
-          <Field label="Durée finale attendue" htmlFor="expectedDuration" error={err("expectedDuration")}><Input {...register("expectedDuration")} placeholder="0:45" /></Field>
-          <Field label="Durée finale réelle" htmlFor="finalDuration" error={err("finalDuration")} hint="Recalcule les coûts « à la minute » non validés."><Input {...register("finalDuration")} /></Field>
+          <Field label={tr("Durée des rushs")} htmlFor="rushDuration" error={err("rushDuration")}><Input {...register("rushDuration")} placeholder="45:00" /></Field>
+          <Field label={tr("Durée finale attendue")} htmlFor="expectedDuration" error={err("expectedDuration")}><Input {...register("expectedDuration")} placeholder="0:45" /></Field>
+          <Field label={tr("Durée finale réelle")} htmlFor="finalDuration" error={err("finalDuration")} hint={tr("Recalcule les coûts « à la minute » non validés.")}><Input {...register("finalDuration")} /></Field>
         </FormGrid>
       </FormSection>
-      <FormSection title="Échéances">
+      <FormSection title={tr("Échéances")}>
         <FormGrid className="md:grid-cols-3">
-          <Field label="Début prévu" htmlFor="plannedStartOn" error={err("plannedStartOn")}><Input type="date" {...register("plannedStartOn")} /></Field>
-          <Field label="Deadline interne" htmlFor="internalDeadline" error={err("internalDeadline")}><Input type="date" {...register("internalDeadline")} /></Field>
-          <Field label="Deadline client" htmlFor="clientDeadline" error={err("clientDeadline")}><Input type="date" {...register("clientDeadline")} /></Field>
+          <Field label={tr("Début prévu")} htmlFor="plannedStartOn" error={err("plannedStartOn")}><Input type="date" {...register("plannedStartOn")} /></Field>
+          <Field label={tr("Deadline interne")} htmlFor="internalDeadline" error={err("internalDeadline")}><Input type="date" {...register("internalDeadline")} /></Field>
+          <Field label={tr("Deadline client")} htmlFor="clientDeadline" error={err("clientDeadline")}><Input type="date" {...register("clientDeadline")} /></Field>
           {hasDeadline ? (
-            <Field label="Motif si une échéance est déplacée" htmlFor="deadlineReason" className="md:col-span-3" hint="Ancienne et nouvelle date sont consignées dans l'historique.">
+            <Field label={tr("Motif si une échéance est déplacée")} htmlFor="deadlineReason" className="md:col-span-3" hint={tr("Ancienne et nouvelle date sont consignées dans l'historique.")}>
               <Input {...register("deadlineReason")} />
             </Field>
           ) : null}
-          <Field label="Allers-retours inclus" htmlFor="includedRevisionRounds" error={err("includedRevisionRounds")}><Input inputMode="numeric" {...register("includedRevisionRounds")} /></Field>
+          <Field label={tr("Allers-retours inclus")} htmlFor="includedRevisionRounds" error={err("includedRevisionRounds")}><Input inputMode="numeric" {...register("includedRevisionRounds")} /></Field>
         </FormGrid>
       </FormSection>
-      <FormSection title="Brief">
+      <FormSection title={tr("Brief")}>
         <div className="grid gap-4">
-          <Field label="Brief" htmlFor="brief"><Textarea rows={6} {...register("brief")} /></Field>
+          <Field label={tr("Brief")} htmlFor="brief"><Textarea rows={6} {...register("brief")} /></Field>
           <FormGrid>
-            <Field label="Objectifs" htmlFor="objectives"><Textarea rows={3} {...register("objectives")} /></Field>
-            <Field label="Audience" htmlFor="audience"><Textarea rows={3} {...register("audience")} /></Field>
-            <Field label="Références" htmlFor="references"><Textarea rows={3} {...register("references")} /></Field>
-            <Field label="Style de sous-titrage" htmlFor="subtitleStyle"><Textarea rows={3} {...register("subtitleStyle")} /></Field>
-            <Field label="Contraintes de marque" htmlFor="brandConstraints"><Textarea rows={3} {...register("brandConstraints")} /></Field>
-            <Field label="Instructions d'export" htmlFor="exportInstructions"><Textarea rows={3} {...register("exportInstructions")} /></Field>
+            <Field label={tr("Objectifs")} htmlFor="objectives"><Textarea rows={3} {...register("objectives")} /></Field>
+            <Field label={tr("Audience")} htmlFor="audience"><Textarea rows={3} {...register("audience")} /></Field>
+            <Field label={tr("Références")} htmlFor="references"><Textarea rows={3} {...register("references")} /></Field>
+            <Field label={tr("Style de sous-titrage")} htmlFor="subtitleStyle"><Textarea rows={3} {...register("subtitleStyle")} /></Field>
+            <Field label={tr("Contraintes de marque")} htmlFor="brandConstraints"><Textarea rows={3} {...register("brandConstraints")} /></Field>
+            <Field label={tr("Instructions d'export")} htmlFor="exportInstructions"><Textarea rows={3} {...register("exportInstructions")} /></Field>
           </FormGrid>
         </div>
       </FormSection>
-      <FormActions pending={pending} submitLabel={videoId ? "Enregistrer" : "Créer la vidéo"} cancelHref={videoId ? `/videos/${videoId}` : "/videos"} />
+      <FormActions pending={pending} submitLabel={videoId ? tr("Enregistrer") : tr("Créer la vidéo")} cancelHref={videoId ? `/videos/${videoId}` : "/videos"} />
     </form>
   );
 }

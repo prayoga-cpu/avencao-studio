@@ -4,16 +4,21 @@ import { VideoForm } from "@/features/production/video-form";
 import { emptyVideo } from "@/features/production/schemas";
 import { requirePagePermission } from "@/server/auth/session";
 import { projectOptions } from "@/server/queries/options";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Nouvelle vidéo" };
+export async function generateMetadata(): Promise<Metadata> {
+  const tr = await getT();
+  return { title: tr("Nouvelle vidéo") };
+}
 
 export default async function NewVideoPage(props: PageProps<"/videos/nouvelle">) {
+  const tr = await getT();
   await requirePagePermission("videos.write");
   const params = await props.searchParams;
   const projects = await projectOptions();
   return (
     <div className="mx-auto max-w-4xl">
-      <PageHeader title="Nouvelle vidéo" subtitle="Le nom suggéré suit « ID — Nom — Deadline » ; la référence stable est attribuée automatiquement." />
+      <PageHeader title={tr("Nouvelle vidéo")} subtitle={tr("Le nom suggéré suit « ID — Nom — Deadline » ; la référence stable est attribuée automatiquement.")} />
       <VideoForm projects={projects.map((p) => ({ value: p.value, label: `${p.label} (${p.clientName})` }))} defaults={emptyVideo(typeof params.projet === "string" ? params.projet : "")} />
     </div>
   );

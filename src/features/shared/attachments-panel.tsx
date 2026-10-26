@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { EmptyState } from "@/components/app/empty-state";
 import { Button } from "@/components/ui/button";
 import { formatDateTime } from "@/lib/dates";
+import { useT } from "#i18n";
 
 export interface AttachmentItem {
   id: string;
@@ -32,6 +33,7 @@ export function AttachmentsPanel({
   timezone: string;
   hint?: string;
 }) {
+  const tr = useT();
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const router = useRouter();
@@ -45,7 +47,7 @@ export function AttachmentsPanel({
       const res = await fetch("/api/files", { method: "POST", body: fd });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Envoi refusé");
-      toast.success("Document ajouté.");
+      toast.success(tr("Document ajouté."));
       router.refresh();
     } catch (e) {
       toast.error((e as Error).message);
@@ -71,13 +73,12 @@ export function AttachmentsPanel({
           />
           <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => input.current?.click()}>
             {busy ? <Loader2 className="animate-spin" aria-hidden /> : <Upload aria-hidden />}
-            Ajouter un document
-          </Button>
-          <p className="text-xs text-faint">{hint}</p>
+            {tr("Ajouter un document")}</Button>
+          <p className="text-xs text-faint">{tr(hint)}</p>
         </div>
       ) : null}
       {items.length === 0 ? (
-        <EmptyState title="Aucun document" description="Factures, contrats ou justificatifs apparaîtront ici." />
+        <EmptyState title={tr("Aucun document")} description={tr("Factures, contrats ou justificatifs apparaîtront ici.")} />
       ) : (
         <ul className="divide-y divide-border rounded-xl border border-border">
           {items.map((a) => (
@@ -87,7 +88,7 @@ export function AttachmentsPanel({
                 <span className="truncate">{a.filename}</span>
               </a>
               <span className="shrink-0 text-xs text-faint">
-                {(a.byteSize / 1024).toFixed(0)} Ko · {formatDateTime(a.createdAt, timezone)}
+                {(a.byteSize / 1024).toFixed(0)} {" "}{tr("Ko ·")}{" "}{formatDateTime(a.createdAt, timezone)}
               </span>
             </li>
           ))}

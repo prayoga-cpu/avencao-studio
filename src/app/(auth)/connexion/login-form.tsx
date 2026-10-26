@@ -12,9 +12,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { useT } from "#i18n";
 
 export function LoginForm() {
   const router = useRouter();
+  const tr = useT();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [remember, setRemember] = useState(true);
@@ -33,8 +35,8 @@ export function LoginForm() {
           if (res.error) {
             setError(
               res.error.status === 429
-                ? "Trop de tentatives. Patientez une minute avant de réessayer."
-                : "Identifiants incorrects ou accès désactivé.",
+                ? tr("Trop de tentatives. Patientez une minute avant de réessayer.")
+                : tr("Identifiants incorrects ou accès désactivé."),
             );
             return;
           }
@@ -45,30 +47,27 @@ export function LoginForm() {
       }}
     >
       {error ? <Notice tone="danger">{error}</Notice> : null}
-      <Field label="Email" htmlFor="email" required>
+      <Field label={tr("Email")} htmlFor="email" required>
         <Input name="email" type="email" autoComplete="email" autoFocus required />
       </Field>
-      <Field label="Mot de passe" htmlFor="password" required>
+      <Field label={tr("Mot de passe")} htmlFor="password" required>
         <PasswordInput name="password" autoComplete="current-password" required minLength={10} />
       </Field>
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Checkbox id="remember" checked={remember} onCheckedChange={(v) => setRemember(v === true)} />
           <Label htmlFor="remember" className="text-sm text-subtle">
-            Rester connecté
-          </Label>
+            {tr("Rester connecté")}</Label>
         </div>
         <Link href="/mot-de-passe-oublie" className="text-sm text-brand hover:text-brand-hover hover:underline">
-          Mot de passe oublié ?
-        </Link>
+          {tr("Mot de passe oublié ?")}</Link>
       </div>
       <Button type="submit" size="lg" disabled={pending} className="mt-2">
         {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-        Se connecter
+        {tr("Se connecter")}
       </Button>
       <p className="text-center text-xs text-faint">
-        Pas d&apos;inscription publique : les accès sont créés sur invitation.
-      </p>
+        {tr("Pas d'inscription publique : les accès sont créés sur invitation.")}</p>
     </form>
   );
 }
