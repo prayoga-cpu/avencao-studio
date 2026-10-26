@@ -17,6 +17,8 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   timeout: 60_000,
+  // Déploiement distant : démarrages à froid et latence réseau → attentes plus longues.
+  expect: { timeout: isLocal ? 5_000 : 20_000 },
   reporter: [["list"]],
   use: { baseURL, trace: "retain-on-failure", locale: "fr-FR", timezoneId: "Asia/Makassar" },
   projects: [
