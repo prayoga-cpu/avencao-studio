@@ -7,6 +7,7 @@ import { NotFoundError } from "../errors";
 import { can, type Actor } from "../policies";
 import { getEditorBalances } from "../services/billing";
 import { agencyToday } from "../services/common";
+import type { EditorChoice } from "@/features/production/assign-dialog";
 
 export async function listEditors(actor: Actor, filters: { q?: string; status?: string; skill?: string; format?: string }) {
   const today = await agencyToday();
@@ -108,4 +109,31 @@ export async function getEditorDetail(actor: Actor, id: string) {
       : null,
     showCosts,
   };
+}
+
+/**
+ * Prestataires actifs proposés à l'affectation (unitaire ou groupée) : compétences, formats et
+ * tarifs actifs ; les prix ne sont transmis qu'avec l'accès aux tarifs. Filtre facultatif sur
+ * le type de vidéo (tarifs génériques ou propres à ce type).
+ */
+export async function getEditorChoices(actor: Actor, videoType?: VideoType): Promise<EditorChoice[]> {
+  const editors = await prisma.editorProfile.findMany({
+    where: { status: "ACTIVE" },
+    orderBy: { displayName: "asc" },
+    select: {
+      id: true, displayName: true, skills: true, formats: true, payCurrency: true,
+      rateCards: { where: { active: true }, select: { id: true, label: true, mode: true, unitPrice: true, currency: true, videoType: true } },
+    },
+  });
+  const showRates = can(actor, "rates.read");
+  return editors.map((e) => ({
+    id: e.id,
+    name: e.displayName,
+    skills: e.skills,
+    formats: e.formats,
+    payCurrency: e.payCurrency,
+    rateCards: e.rateCards
+      .filter((r) => !videoType || !r.videoType || r.videoType === videoType)
+      .map((r) => ({ id: r.id, label: r.label, mode: r.mode, unitPrice: showRates ? r.unitPrice.toFixed(2) : null, currency: r.currency, videoType: r.videoType })),
+  }));
 }

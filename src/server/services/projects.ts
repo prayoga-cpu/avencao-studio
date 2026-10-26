@@ -1,18 +1,26 @@
 import "server-only";
 import type { BulkVideosInput, ProjectInput, VideoInput } from "@/features/production/schemas";
 import { bulkVideosSchema, projectSchema, videoSchema } from "@/features/production/schemas";
-import type { VideoType } from "@/generated/prisma/enums";
+import type { ProjectStatus, VideoType } from "@/generated/prisma/enums";
 import { parseDurationInput } from "@/lib/dates";
-import { VIDEO_TYPE_LABELS } from "@/lib/labels";
+import { PROJECT_STATUS, VIDEO_TYPE_LABELS } from "@/lib/labels";
 import { recordAudit } from "../audit";
 import { dateOrNull, decOrNull, intOrNull, str } from "../convert";
 import { prisma, type Db } from "../db";
+import { ACTIVE_VIDEO_STATUSES } from "../domain/video-workflow";
 import { DomainError, NotFoundError } from "../errors";
 import { assertCan, type Actor } from "../policies";
 import { nextReference } from "../references";
 import { getSettings } from "../settings";
 import { agencyToday, assertVersion } from "./common";
-import { repriceMinuteCostsForVideo } from "./assignments";
+import { followVideoDeadline, repriceMinuteCostsForVideo } from "./assignments";
+import { syncProjectAutoAllocations } from "./sales";
+
+/** Un projet « terminé » ou archivé ne peut plus avoir de vidéo en production. */
+const CLOSING_PROJECT_STATUSES: ProjectStatus[] = ["COMPLETED", "ARCHIVED"];
+
+/** Création groupée : plusieurs dizaines d'écritures dans une seule transaction. */
+const BULK_TX = { timeout: 30_000, maxWait: 10_000 };
 
 function projectData(d: ReturnType<typeof projectSchema.parse>) {
   return {
@@ -33,11 +41,13 @@ function projectData(d: ReturnType<typeof projectSchema.parse>) {
   };
 }
 
-async function copyChecklist(db: Db, videoId: string) {
+/** Checklist qualité copiée sur chaque nouvelle vidéo (modèle lu une seule fois). */
+async function copyChecklist(db: Db, videoIds: string[]) {
+  if (videoIds.length === 0) return;
   const items = await db.checklistTemplateItem.findMany({ where: { active: true }, orderBy: { position: "asc" } });
   if (items.length) {
     await db.videoChecklistItem.createMany({
-      data: items.map((i) => ({ videoId, label: i.label, position: i.position })),
+      data: videoIds.flatMap((videoId) => items.map((i) => ({ videoId, label: i.label, position: i.position }))),
     });
   }
 }
@@ -73,30 +83,29 @@ export async function createProject(actor: Actor, input: ProjectInput): Promise<
       },
     });
     if (template && count > 0) {
+      const rows = [];
       for (let i = 1; i <= count; i++) {
-        const ref = await nextReference(tx, "VIDEO", year, settings.videoRefPrefix);
-        const video = await tx.video.create({
-          data: {
-            reference: ref,
-            projectId: project.id,
-            title: titleFromPattern(template.titlePattern, template.videoType, i, count),
-            type: template.videoType,
-            ratio: template.defaultRatio,
-            format: template.defaultFormat,
-            expectedDurationSec: template.defaultExpectedSec,
-            estimatedHours: template.defaultEstimatedHours,
-            includedRevisionRounds: template.defaultIncludedRevisions,
-            clientDeadline: project.clientDeadline,
-            priority: project.priority,
-            position: i,
-          },
+        rows.push({
+          reference: await nextReference(tx, "VIDEO", year, settings.videoRefPrefix),
+          projectId: project.id,
+          title: titleFromPattern(template.titlePattern, template.videoType, i, count),
+          type: template.videoType,
+          ratio: template.defaultRatio,
+          format: template.defaultFormat,
+          expectedDurationSec: template.defaultExpectedSec,
+          estimatedHours: template.defaultEstimatedHours,
+          includedRevisionRounds: template.defaultIncludedRevisions,
+          clientDeadline: project.clientDeadline,
+          priority: project.priority,
+          position: i,
         });
-        await copyChecklist(tx, video.id);
       }
+      const videos = await tx.video.createManyAndReturn({ data: rows, select: { id: true } });
+      await copyChecklist(tx, videos.map((v) => v.id));
     }
     await recordAudit(tx, { actorId: actor.id, action: "project.create", entityType: "Project", entityId: project.id, after: { reference, title: d.title, videos: count } });
     return { id: project.id, reference };
-  });
+  }, BULK_TX);
 }
 
 export async function updateProject(actor: Actor, id: string, input: ProjectInput & { deadlineReason?: string }) {
@@ -108,6 +117,14 @@ export async function updateProject(actor: Actor, id: string, input: ProjectInpu
   if (current.clientId !== d.clientId) {
     const linked = await prisma.salesOrder.count({ where: { projectId: id } });
     if (linked > 0) throw new DomainError("Le client ne peut plus être changé : des ventes sont rattachées au projet.");
+  }
+  if (d.status !== current.status && CLOSING_PROJECT_STATUSES.includes(d.status)) {
+    const active = await prisma.video.count({ where: { projectId: id, status: { in: ACTIVE_VIDEO_STATUSES } } });
+    if (active > 0) {
+      throw new DomainError(
+        `Statut « ${PROJECT_STATUS[d.status].label} » impossible : ${active} vidéo(s) encore en production. Livrez-les ou annulez-les d'abord.`,
+      );
+    }
   }
   const data = projectData(d);
   await prisma.$transaction(async (tx) => {
@@ -171,7 +188,8 @@ export async function createVideo(actor: Actor, input: VideoInput): Promise<{ id
         position: count + 1,
       },
     });
-    await copyChecklist(tx, video.id);
+    await copyChecklist(tx, [video.id]);
+    await syncProjectAutoAllocations(tx, actor.id, d.projectId);
     await recordAudit(tx, { actorId: actor.id, action: "video.create", entityType: "Video", entityId: video.id, after: { reference } });
     return { id: video.id, reference };
   });
@@ -186,39 +204,40 @@ export async function createVideosBulk(actor: Actor, input: BulkVideosInput): Pr
   const settings = await getSettings();
   const year = Number((await agencyToday()).slice(0, 4));
   const count = Number(d.count);
+  const rushesUrl = str(d.rushesUrl);
   return prisma.$transaction(async (tx) => {
     const existing = await tx.video.count({ where: { projectId: d.projectId } });
-    const ids: string[] = [];
+    const rows = [];
     for (let i = 1; i <= count; i++) {
-      const reference = await nextReference(tx, "VIDEO", year, settings.videoRefPrefix);
-      const video = await tx.video.create({
-        data: {
-          reference,
-          projectId: d.projectId,
-          title: titleFromPattern(d.titlePattern, d.type, existing + i, existing + count),
-          type: d.type,
-          format: str(d.format),
-          ratio: str(d.ratio),
-          expectedDurationSec: parseDurationInput(d.expectedDuration),
-          internalDeadline: dateOrNull(d.internalDeadline),
-          clientDeadline: dateOrNull(d.clientDeadline) ?? project.clientDeadline,
-          estimatedHours: decOrNull(d.estimatedHours)?.toFixed(2) ?? null,
-          priority: d.priority,
-          brief: str(d.brief),
-          includedRevisionRounds: project.includedRevisionRounds,
-          status: str(d.rushesUrl) ? "TO_ASSIGN" : "TO_PREPARE",
-          position: existing + i,
-        },
+      rows.push({
+        reference: await nextReference(tx, "VIDEO", year, settings.videoRefPrefix),
+        projectId: d.projectId,
+        title: titleFromPattern(d.titlePattern, d.type, existing + i, existing + count),
+        type: d.type,
+        format: str(d.format),
+        ratio: str(d.ratio),
+        expectedDurationSec: parseDurationInput(d.expectedDuration),
+        internalDeadline: dateOrNull(d.internalDeadline),
+        clientDeadline: dateOrNull(d.clientDeadline) ?? project.clientDeadline,
+        estimatedHours: decOrNull(d.estimatedHours)?.toFixed(2) ?? null,
+        priority: d.priority,
+        brief: str(d.brief),
+        includedRevisionRounds: project.includedRevisionRounds,
+        status: rushesUrl ? ("TO_ASSIGN" as const) : ("TO_PREPARE" as const),
+        position: existing + i,
       });
-      if (str(d.rushesUrl)) {
-        await tx.videoLink.create({ data: { videoId: video.id, kind: "RUSHES", url: d.rushesUrl, label: "Rushs", createdById: actor.id } });
-      }
-      await copyChecklist(tx, video.id);
-      ids.push(video.id);
     }
+    // Écritures groupées : quelques requêtes au lieu de cinq par vidéo (60 vidéos restent rapides).
+    const videos = await tx.video.createManyAndReturn({ data: rows, select: { id: true } });
+    const ids = videos.map((v) => v.id);
+    if (rushesUrl) {
+      await tx.videoLink.createMany({ data: ids.map((videoId) => ({ videoId, kind: "RUSHES" as const, url: rushesUrl, label: "Rushs", createdById: actor.id })) });
+    }
+    await copyChecklist(tx, ids);
+    await syncProjectAutoAllocations(tx, actor.id, d.projectId);
     await recordAudit(tx, { actorId: actor.id, action: "video.bulk_create", entityType: "Project", entityId: d.projectId, after: { count } });
     return { ids };
-  });
+  }, BULK_TX);
 }
 
 export async function updateVideo(actor: Actor, id: string, input: VideoInput) {
@@ -246,8 +265,13 @@ export async function updateVideo(actor: Actor, id: string, input: VideoInput) {
         data: { field: c.field, videoId: id, oldDate: c.old, newDate: c.next, reason: str(d.deadlineReason), actorId: actor.id },
       });
     }
+    if (changes.length) await followVideoDeadline(tx, actor, id, current, data);
     if (current.finalDurationSec !== data.finalDurationSec || current.expectedDurationSec !== data.expectedDurationSec) {
       await repriceMinuteCostsForVideo(tx, actor, id);
+    }
+    if (current.projectId !== d.projectId) {
+      await syncProjectAutoAllocations(tx, actor.id, current.projectId);
+      await syncProjectAutoAllocations(tx, actor.id, d.projectId);
     }
     await recordAudit(tx, { actorId: actor.id, action: "video.update", entityType: "Video", entityId: id, before: current, after: data });
   });
@@ -264,11 +288,14 @@ export async function moveVideoDeadline(actor: Actor, input: { videoId: string; 
   if ((old?.getTime() ?? null) === (next?.getTime() ?? null)) return { id: video.id };
   if (input.field === "VIDEO_CLIENT" && !input.reason.trim()) throw new DomainError("Un motif est requis pour déplacer une deadline client.");
   await prisma.$transaction(async (tx) => {
-    await tx.video.update({
+    const after = await tx.video.update({
       where: { id: video.id },
       data: { ...(input.field === "VIDEO_INTERNAL" ? { internalDeadline: next } : { clientDeadline: next }), version: { increment: 1 } },
+      select: { internalDeadline: true, clientDeadline: true },
     });
     await tx.deadlineChange.create({ data: { field: input.field, videoId: video.id, oldDate: old, newDate: next, reason: str(input.reason), actorId: actor.id } });
+    // Les missions qui suivaient l'échéance de la vidéo se déplacent avec elle (planning du monteur).
+    await followVideoDeadline(tx, actor, video.id, video, after);
   });
   return { id: video.id };
 }

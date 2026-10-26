@@ -33,8 +33,10 @@ export async function Sidebar() {
     icon,
   }));
 
+  // Carte profil : déconnexion sur la ligne du nom, compteur sur la cloche. La ligne du bas
+  // (notifications + langue) tient dans la largeur utile de la carte, en FR comme en EN.
   const profile = (
-    <div className="rounded-2xl border border-white/10 bg-[#0e0e0e] p-3">
+    <div className="min-w-0 rounded-2xl border border-white/10 bg-[#0e0e0e] p-3">
       <div className="flex items-center gap-3">
         <div
           className="flex size-10 shrink-0 items-center justify-center rounded-full border border-white/20 bg-surface-2 text-sm font-bold"
@@ -42,28 +44,29 @@ export async function Sidebar() {
         >
           {initials(actor.name)}
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{actor.name}</p>
           <p className="truncate text-xs font-bold text-warning">{tr(ROLE_LABELS[actor.role])}</p>
         </div>
+        <LogoutButton compact />
       </div>
       <div className="mt-3 flex items-center justify-between gap-2">
         <Link
           href="/notifications"
-          className="relative inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-subtle hover:bg-brand-soft hover:text-foreground"
+          aria-label={unread > 0 ? tr("Notifications ({0} non lues)", [unread]) : undefined}
+          className="inline-flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-subtle hover:bg-brand-soft hover:text-foreground"
         >
-          <Bell className="size-4" aria-hidden />
-          {tr("Notifications")}{unread > 0 ? (
-            <span className="num rounded-full bg-brand px-1.5 text-[0.7rem] font-bold text-white">
-              {unread > 99 ? "99+" : unread}
-              <span className="sr-only"> {" "}{tr("non lues")}</span>
-            </span>
-          ) : null}
+          <span className="relative shrink-0" aria-hidden>
+            <Bell className="size-4" />
+            {unread > 0 ? (
+              <span className="num absolute -top-2 -right-2.5 min-w-4 rounded-full bg-brand px-1 text-center text-[0.6rem] leading-4 font-bold text-white">
+                {unread > 99 ? "99+" : unread}
+              </span>
+            ) : null}
+          </span>
+          <span className="truncate">{tr("Notifications")}</span>
         </Link>
-        <div className="flex items-center gap-1">
-          <LanguageToggle />
-          <LogoutButton compact />
-        </div>
+        <LanguageToggle />
       </div>
     </div>
   );

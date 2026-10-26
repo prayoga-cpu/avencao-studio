@@ -16,7 +16,7 @@ export async function agencyTimezone(): Promise<string> {
 
 /** Verrou de ligne (SELECT … FOR UPDATE) dans une transaction, contre les doubles affectations. */
 export async function lockRow(db: Db, table: string, id: string): Promise<void> {
-  const allowed = ["ClientPayment", "Invoice", "DirectCost", "SupplierPayment", "CreditNote", "SalesOrderLine", "RetainerPeriod", "Retainer"];
+  const allowed = ["ClientPayment", "Invoice", "DirectCost", "SupplierPayment", "CreditNote", "SalesOrderLine", "RetainerPeriod", "Retainer", "Video"];
   if (!allowed.includes(table)) throw new Error("Table non verrouillable");
   await db.$queryRawUnsafe(`SELECT id FROM "${table}" WHERE id = $1 FOR UPDATE`, id);
 }

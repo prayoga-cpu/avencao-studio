@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   createColumnHelper,
   createSortedRowModel,
@@ -12,20 +12,15 @@ import {
   tableFeatures,
   useTable,
 } from "@tanstack/react-table";
-import { ArrowDownUp, Loader2, ShieldAlert } from "lucide-react";
-import { toast } from "sonner";
-import { NativeSelect } from "@/components/app/field";
+import { ArrowDownUp } from "lucide-react";
 import { Money, Percent } from "@/components/app/money";
 import { StatusBadge } from "@/components/app/status-badge";
-import { useAction } from "@/components/app/use-action";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { formatDateOnly } from "@/lib/dates";
 import { PRIORITY, VIDEO_STATUS, VIDEO_TYPE_LABELS } from "@/lib/labels";
 import { cn } from "@/lib/utils";
-import type { Priority, VideoStatus } from "@/generated/prisma/enums";
 import type { VideoListRow } from "@/server/queries/production";
-import { bulkVideoAction } from "./actions";
+import type { EditorChoice } from "./assign-dialog";
+import { BulkBar } from "./bulk-bar";
 import { useT } from "#i18n";
 
 const features = tableFeatures({
@@ -36,7 +31,21 @@ const features = tableFeatures({
 });
 const helper = createColumnHelper<typeof features, VideoListRow>();
 
-export function VideosTable({ rows, showFinance, canBulk }: { rows: VideoListRow[]; showFinance: boolean; canBulk: boolean }) {
+export function VideosTable({
+  rows,
+  showFinance,
+  canBulk,
+  canForce = false,
+  assign = null,
+}: {
+  rows: VideoListRow[];
+  showFinance: boolean;
+  canBulk: boolean;
+  /** Administrateur : peut forcer une étape hors workflow (motif obligatoire). */
+  canForce?: boolean;
+  /** Attribution groupée (droit d'affectation) : prestataires proposés. */
+  assign?: { editors: EditorChoice[]; canSetPrice: boolean } | null;
+}) {
   const tr = useT();
   const columns = useMemo(
     () =>
@@ -71,7 +80,7 @@ export function VideosTable({ rows, showFinance, canBulk }: { rows: VideoListRow
           sortFn: "alphanumeric",
           cell: ({ row }) => (
             <Link href={`/videos/${row.original.id}`} className="hover:text-brand hover:underline">
-              <span className="text-xs text-faint">{row.original.reference} · {tr(VIDEO_TYPE_LABELS[row.original.type])}</span>
+              <span className="whitespace-nowrap text-xs text-faint">{row.original.reference} · {tr(VIDEO_TYPE_LABELS[row.original.type])}</span>
               <span className="block font-medium text-foreground">{row.original.title}</span>
             </Link>
           ),
@@ -93,7 +102,7 @@ export function VideosTable({ rows, showFinance, canBulk }: { rows: VideoListRow
           header: tr("Deadline client"),
           sortFn: "alphanumeric",
           cell: ({ row }) => (
-            <span className="flex flex-col">
+            <span className="flex flex-col whitespace-nowrap">
               <span className={cn("num", row.original.overdue ? "font-semibold text-danger" : row.original.dueSoon && "text-warning")}>
                 {formatDateOnly(row.original.clientDeadline)}
                 {row.original.overdue ? tr(" · retard") : ""}
@@ -108,15 +117,7 @@ export function VideosTable({ rows, showFinance, canBulk }: { rows: VideoListRow
               helper.accessor((r) => r.finance?.marginEur ?? "0", {
                 id: "margin",
                 header: tr("Marge"),
-                cell: ({ row }) =>
-                  row.original.finance ? (
-                    <span className="flex flex-col items-end">
-                      <Money value={row.original.finance.marginEur} colorize />
-                      <span className={cn("text-xs", row.original.finance.missing ? "text-warning" : "text-subtle")}>
-                        {row.original.finance.missing ? tr("{0} coût(s) manquant(s)", [row.original.finance.missing]) : <Percent value={row.original.finance.ratePct} />}
-                      </span>
-                    </span>
-                  ) : null,
+                cell: ({ row }) => (row.original.finance ? <MarginCell finance={row.original.finance} /> : null),
               }),
             ]
           : []),
@@ -126,10 +127,19 @@ export function VideosTable({ rows, showFinance, canBulk }: { rows: VideoListRow
 
   const table = useTable({ features, columns, data: rows, getRowId: (r) => r.id });
   const selected = table.getSelectedRowModel().rows.map((r) => r.original);
+  const sortedRows = table.getRowModel().rows;
 
   return (
-    <div className="flex flex-col gap-3">
-      {canBulk && selected.length > 0 ? <BulkBar selected={selected} onDone={() => table.resetRowSelection()} /> : null}
+    <div className={cn("flex flex-col gap-3", canBulk && selected.length > 0 && "max-md:pb-60")}>
+      {canBulk && selected.length > 0 ? (
+        <BulkBar
+          selected={selected}
+          canForce={canForce}
+          assign={assign}
+          onClear={() => table.resetRowSelection()}
+          onDone={(keep) => table.setRowSelection(Object.fromEntries(keep.map((id) => [id, true])))}
+        />
+      ) : null}
       <div className="hidden overflow-x-auto rounded-xl border border-brand-border md:block av-scroll">
         <table className="w-full min-w-[820px] text-sm">
           <caption className="sr-only">{tr("Liste des vidéos")}</caption>
@@ -145,7 +155,7 @@ export function VideosTable({ rows, showFinance, canBulk }: { rows: VideoListRow
                       scope="col"
                       aria-sort={dir === "asc" ? "ascending" : dir === "desc" ? "descending" : undefined}
                       className={cn(
-                        "border-b border-brand-border px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-[#ffc2db]",
+                        "border-b border-brand-border px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide whitespace-nowrap text-[#ffc2db]",
                         (h.id === "revenue" || h.id === "margin") && "text-right",
                       )}
                     >
@@ -164,10 +174,10 @@ export function VideosTable({ rows, showFinance, canBulk }: { rows: VideoListRow
             ))}
           </thead>
           <tbody>
-            {table.getRowModel().rows.map((row) => (
+            {sortedRows.map((row) => (
               <tr key={row.id} className={cn("border-b border-white/5 hover:bg-brand-soft/40", row.getIsSelected() && "bg-brand-soft/50")}>
                 {row.getAllCells().map((cell) => (
-                  <td key={cell.id} className={cn("px-3 py-2 align-middle", (cell.column.id === "revenue" || cell.column.id === "margin") && "text-right")}>
+                  <td key={cell.id} className={cn("px-3 py-2 align-middle", (cell.column.id === "revenue" || cell.column.id === "margin") && "text-right whitespace-nowrap")}>
                     <table.FlexRender cell={cell} />
                   </td>
                 ))}
@@ -176,62 +186,67 @@ export function VideosTable({ rows, showFinance, canBulk }: { rows: VideoListRow
           </tbody>
         </table>
       </div>
-      <ul className="flex flex-col gap-2 md:hidden">
-        {rows.map((r) => (
-          <li key={r.id} className="rounded-xl border border-brand-border bg-surface p-3">
-            <Link href={`/videos/${r.id}`} className="block">
-              <span className="text-xs text-faint">{r.reference} · {r.client.displayName}</span>
-              <span className="block font-semibold">{r.title}</span>
-            </Link>
-            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
-              <StatusBadge {...VIDEO_STATUS[r.status]} />
-              {r.isBlocked ? <StatusBadge label={tr("Bloquée")} tone="danger" /> : null}
-              <span className={cn("num", r.overdue ? "font-semibold text-danger" : "text-subtle")}>{tr("Client :")}{" "}{formatDateOnly(r.clientDeadline)}</span>
-              <span className="text-subtle">· {r.editors.join(", ") || tr("non attribuée")}</span>
-            </div>
-          </li>
-        ))}
-      </ul>
+
+      {/* Mobile : cartes sélectionnables (actions groupées disponibles aussi sur téléphone). */}
+      <div className="flex flex-col gap-2 md:hidden">
+        {canBulk ? (
+          <label className="flex items-center gap-2 px-1 text-sm text-subtle">
+            <input
+              type="checkbox"
+              className="size-5 accent-[var(--av-accent)]"
+              checked={table.getIsAllRowsSelected()}
+              onChange={() => table.toggleAllRowsSelected()}
+            />
+            {tr("Tout sélectionner ({0})", [rows.length])}
+          </label>
+        ) : null}
+        <ul className="flex flex-col gap-2">
+          {sortedRows.map((row) => {
+            const r = row.original;
+            return (
+              <li key={r.id} className={cn("flex gap-3 rounded-xl border border-brand-border bg-surface p-3", row.getIsSelected() && "border-brand bg-brand-soft/40")}>
+                {canBulk ? (
+                  <input
+                    type="checkbox"
+                    aria-label={tr("Sélectionner {0}", [r.reference])}
+                    className="mt-0.5 size-5 shrink-0 accent-[var(--av-accent)]"
+                    checked={row.getIsSelected()}
+                    onChange={() => row.toggleSelected()}
+                  />
+                ) : null}
+                <div className="min-w-0 flex-1">
+                  <Link href={`/videos/${r.id}`} className="block">
+                    <span className="block truncate text-xs text-faint"><span className="num whitespace-nowrap">{r.reference}</span> · {r.client.displayName}</span>
+                    <span className="block font-semibold">{r.title}</span>
+                  </Link>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+                    <StatusBadge {...VIDEO_STATUS[r.status]} />
+                    {r.isBlocked ? <StatusBadge label={tr("Bloquée")} tone="danger" /> : null}
+                    {r.priority !== "NORMAL" ? <StatusBadge {...PRIORITY[r.priority]} /> : null}
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                    <span className={cn("num whitespace-nowrap", r.overdue ? "font-semibold text-danger" : "text-subtle")}>{tr("Client :")}{" "}{formatDateOnly(r.clientDeadline)}{r.overdue ? tr(" · retard") : ""}</span>
+                    <span className={r.editors.length ? "text-subtle" : "text-warning"}>{r.editors.join(", ") || tr("non attribuée")}</span>
+                    {showFinance && r.finance ? <span className="ml-auto"><Money value={r.finance.marginEur} colorize /></span> : null}
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
     </div>
   );
 }
 
-const BULK_TARGETS: VideoStatus[] = ["WAITING_RUSHES", "TO_ASSIGN", "EDITING", "CLIENT_REVIEW", "APPROVED", "DELIVERED", "ARCHIVED"];
-
-function BulkBar({ selected, onDone }: { selected: VideoListRow[]; onDone: () => void }) {
+function MarginCell({ finance }: { finance: NonNullable<VideoListRow["finance"]> }) {
   const tr = useT();
-  const [priority, setPriority] = useState<Priority | "">("");
-  const [to, setTo] = useState<VideoStatus | "">("");
-  const [reason, setReason] = useState("");
-  const { pending, run } = useAction();
   return (
-    <div role="region" aria-label={tr("Actions groupées")} className="flex flex-wrap items-center gap-2 rounded-xl border border-brand bg-brand-soft p-3 text-sm">
-      <span className="font-semibold">{selected.length} {" "}{tr("sélectionnée(s)")}</span>
-      <NativeSelect aria-label={tr("Priorité")} className="w-auto" value={priority} onChange={(e) => setPriority(e.target.value as Priority | "")}>
-        <option value="">{tr("Changer la priorité…")}</option>
-        {Object.entries(PRIORITY).map(([v, p]) => <option key={v} value={v}>{tr(p.label)}</option>)}
-      </NativeSelect>
-      <NativeSelect aria-label={tr("Étape")} className="w-auto" value={to} onChange={(e) => setTo(e.target.value as VideoStatus | "")}>
-        <option value="">{tr("Passer à l'étape…")}</option>
-        {BULK_TARGETS.map((s) => <option key={s} value={s}>{tr(VIDEO_STATUS[s].label)}</option>)}
-      </NativeSelect>
-      {to ? <Input aria-label={tr("Motif")} className="w-56" placeholder={tr("Motif (si exigé)")} value={reason} onChange={(e) => setReason(e.target.value)} /> : null}
-      <Button
-        size="sm"
-        disabled={pending || (!priority && !to)}
-        onClick={() =>
-          run(() => bulkVideoAction({ ids: selected.map((s) => s.id), priority: priority || undefined, to: to || undefined, reason }), {
-            onSuccess: (r) => {
-              toast.success(tr("{0} mise(s) à jour.", [r.ok]));
-              if (r.errors.length) toast.warning(tr("{0} refus : {1}{2}", [r.errors.length, r.errors.slice(0, 3).join(" · "), r.errors.length > 3 ? "…" : ""]), { duration: 10000 });
-              onDone();
-            },
-          })
-        }
-      >
-        {pending ? <Loader2 className="animate-spin" aria-hidden /> : <ShieldAlert aria-hidden />}
-        {tr("Appliquer")}</Button>
-      <p className="w-full text-xs text-subtle">{tr("Chaque vidéo est vérifiée individuellement (droits et workflow) : les refus sont listés.")}</p>
-    </div>
+    <span className="flex flex-col items-end">
+      <Money value={finance.marginEur} colorize />
+      <span className={cn("text-xs", finance.missing ? "text-warning" : "text-subtle")}>
+        {finance.missing ? tr("{0} coût(s) manquant(s)", [finance.missing]) : <Percent value={finance.ratePct} />}
+      </span>
+    </span>
   );
 }

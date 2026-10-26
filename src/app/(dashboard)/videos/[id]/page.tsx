@@ -36,15 +36,16 @@ import {
   PRIORITY,
   RATE_MODE_LABELS,
   VIDEO_STATUS,
+  VIDEO_STATUSES,
   VIDEO_TYPE_LABELS,
 } from "@/lib/labels";
 import { dec, sum, type CurrencyCode } from "@/lib/money";
 import { requirePagePermission } from "@/server/auth/session";
-import { prisma } from "@/server/db";
 import { VIDEO_TRANSITIONS, allowedTransitions } from "@/server/domain/video-workflow";
 import { MARGIN_STATUS_LABELS } from "@/server/domain/profitability";
 import { can } from "@/server/policies";
 import { getNotes } from "@/server/queries/clients";
+import { getEditorChoices } from "@/server/queries/editors";
 import { editorOptions } from "@/server/queries/options";
 import { getVideoDetail } from "@/server/queries/production";
 import { agencyToday } from "@/server/services/common";
@@ -93,6 +94,8 @@ export default async function VideoPage(props: PageProps<"/videos/[id]">) {
           : undefined,
     };
   });
+  // Administrateur : étapes hors workflow, forçables avec motif.
+  const forceTargets = actor.role === "ADMIN" ? VIDEO_STATUSES.filter((s) => s !== v.status && !transitions.some((t) => t.to === s)) : [];
   const clientDeadline = v.clientDeadline ? toDateOnlyString(v.clientDeadline) : null;
   const overdue = clientDeadline !== null && clientDeadline < today && !["DELIVERED", "ARCHIVED", "CANCELLED", "APPROVED"].includes(v.status);
   const includedRounds = v.includedRevisionRounds ?? v.project.includedRevisionRounds;
@@ -126,7 +129,7 @@ export default async function VideoPage(props: PageProps<"/videos/[id]">) {
         {canWrite ? (
           <div className="rounded-xl border border-brand-border bg-black/30 p-3">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle">{tr("Faire avancer la vidéo")}</p>
-            <WorkflowActions videoId={v.id} options={transitions} hasRevenue={(allocations?.length ?? 0) > 0} />
+            <WorkflowActions videoId={v.id} options={transitions} hasRevenue={(allocations?.length ?? 0) > 0} forceTargets={forceTargets} />
           </div>
         ) : null}
       </PageHeader>
@@ -146,27 +149,7 @@ export default async function VideoPage(props: PageProps<"/videos/[id]">) {
   );
 
   async function ProductionTab() {
-    const editors = canWrite
-      ? await prisma.editorProfile.findMany({
-          where: { status: "ACTIVE" },
-          orderBy: { displayName: "asc" },
-          select: {
-            id: true, displayName: true, skills: true, formats: true, payCurrency: true,
-            rateCards: { where: { active: true }, select: { id: true, label: true, mode: true, unitPrice: true, currency: true, videoType: true } },
-          },
-        })
-      : [];
-    const showRates = can(actor, "rates.read");
-    const editorChoices = editors.map((e) => ({
-      id: e.id,
-      name: e.displayName,
-      skills: e.skills,
-      formats: e.formats,
-      payCurrency: e.payCurrency,
-      rateCards: e.rateCards
-        .filter((r) => !r.videoType || r.videoType === v.type)
-        .map((r) => ({ id: r.id, label: tr(r.label), mode: r.mode, unitPrice: showRates ? r.unitPrice.toFixed(2) : null, currency: r.currency, videoType: r.videoType })),
-    }));
+    const editorChoices = canWrite ? await getEditorChoices(actor, v.type) : [];
     const showCosts = can(actor, "costs.read");
     const totalHours = sum(v.timeEntries.map((t) => dec(t.minutes))).div(60);
     return (
@@ -175,7 +158,7 @@ export default async function VideoPage(props: PageProps<"/videos/[id]">) {
           <Section
             title={tr("Missions")}
             description={tr("Plusieurs prestataires peuvent contribuer (dérushage, montage, motion…). Chaque mission porte son tarif figé.")}
-            actions={canWrite ? <AssignDialog videoId={v.id} internalDeadline={v.internalDeadline ? toDateOnlyString(v.internalDeadline) : ""} estimatedHours={v.estimatedHours?.toFixed() ?? ""} editors={editorChoices} canSetPrice={can(actor, "costs.write")} /> : null}
+            actions={canWrite ? <AssignDialog videoId={v.id} internalDeadline={v.internalDeadline ? toDateOnlyString(v.internalDeadline) : ""} clientDeadline={v.clientDeadline ? toDateOnlyString(v.clientDeadline) : ""} estimatedHours={v.estimatedHours?.toFixed() ?? ""} editors={editorChoices} canSetPrice={can(actor, "costs.write")} /> : null}
           >
             {v.assignments.length === 0 ? (
               <p className="text-sm text-subtle">{tr("Aucun prestataire affecté.")}</p>

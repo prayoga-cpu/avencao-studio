@@ -25,18 +25,14 @@ import { formatDateOnly } from "@/lib/dates";
 import { PRIORITY, VIDEO_STATUS, VIDEO_STATUSES } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import type { VideoStatus } from "@/generated/prisma/enums";
+import { transitionNeedsReason } from "@/server/domain/video-workflow";
 import type { VideoListRow } from "@/server/queries/production";
 import { transitionVideoAction } from "./actions";
 import { useT } from "#i18n";
 
-const REASON_REQUIRED: Partial<Record<VideoStatus, VideoStatus[]>> = {
-  APPROVED: ["CLIENT_CHANGES", "CANCELLED"],
-  DELIVERED: ["CLIENT_CHANGES"],
-  CANCELLED: ["TO_PREPARE"],
-};
-
+/** Motif exigé : règles du workflow (source unique), plus toute annulation. */
 function needsReason(from: VideoStatus, to: VideoStatus) {
-  return to === "CANCELLED" || (REASON_REQUIRED[from] ?? []).includes(to);
+  return to === "CANCELLED" || transitionNeedsReason(from, to);
 }
 
 /**

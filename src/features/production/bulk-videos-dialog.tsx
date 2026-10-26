@@ -23,7 +23,7 @@ export function BulkVideosDialog({ projectId, clientDeadline }: { projectId: str
         <Button size="sm">
           <ListPlus aria-hidden /> {" "}{tr("Ajouter des vidéos")}</Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl">
+      <DialogContent size="2xl">
         <DialogHeader>
           <DialogTitle>{tr("Ajouter des vidéos au projet")}</DialogTitle>
           <DialogDescription>{tr("Chaque vidéo reçoit sa référence stable et la checklist qualité. Avec un lien de rushs, elles passent directement « À attribuer ».")}</DialogDescription>

@@ -8,23 +8,39 @@ import "server-only";
  * - La recommandation affichée est explicable (compétences, formats, charge, coût) :
  *   aucune « IA de matching » n'est prétendue.
  */
-import type { AssignmentInput, AssignmentUpdateInput } from "@/features/production/schemas";
-import { assignmentSchema, assignmentUpdateSchema } from "@/features/production/schemas";
+import type { AssignmentInput, AssignmentUpdateInput, BulkAssignmentInput } from "@/features/production/schemas";
+import { assignmentSchema, assignmentUpdateSchema, bulkAssignmentSchema } from "@/features/production/schemas";
 import type { Currency, MinuteRounding, RateMode } from "@/generated/prisma/enums";
-import { addDays, parseDateOnly, toDateOnlyString } from "@/lib/dates";
+import { addDays, formatDateOnly, parseDateOnly, toDateOnlyString } from "@/lib/dates";
+import { ASSIGNMENT_ROLE_LABELS } from "@/lib/labels";
 import { Decimal, dec, roundMoney, type CurrencyCode } from "@/lib/money";
 import { recordAudit } from "../audit";
+import { groupRefusals, refusalMessage, type BulkRefusal } from "../bulk";
 import { dateOrNull, decOrNull, intOrNull, str } from "../convert";
 import { prisma, type Db } from "../db";
 import { DomainError, ForbiddenError, NotFoundError } from "../errors";
 import { computeAssignmentCost, type CostResult } from "../domain/costing";
 import { computeMargin, isBelowThreshold } from "../domain/profitability";
+import { ACTIVE_ASSIGNMENT_STATUSES, missionDueDate } from "../domain/schedule";
+import { CLOSED_VIDEO_STATUSES as CLOSED_STATUSES } from "../domain/video-workflow";
 import { convert, fxData, resolveFx } from "../fx";
 import { notify } from "../notifications";
 import { assertCan, can, type Actor } from "../policies";
 import { getSettings } from "../settings";
-import { agencyToday } from "./common";
+import { agencyToday, lockRow } from "./common";
 import { getEditorLoad, getVideosFinancials } from "./profitability";
+
+/** Compétences attendues par rôle de production (adéquation affichée, jamais bloquante). */
+const ROLE_SKILLS: Record<string, string[]> = {
+  EDIT: ["PREMIERE_PRO", "DAVINCI_RESOLVE", "CAPCUT", "AFTER_EFFECTS"],
+  RUSH_PREP: ["RUSH_PREP"],
+  MOTION: ["MOTION_DESIGN", "AFTER_EFFECTS"],
+  SUBTITLES: ["SUBTITLING"],
+  COLOR: ["COLOR_GRADING", "DAVINCI_RESOLVE"],
+  SOUND: ["SOUND_DESIGN"],
+  THUMBNAIL: ["THUMBNAIL"],
+  OTHER: [],
+};
 
 interface FrozenRate {
   rateMode: RateMode | null;
@@ -125,17 +141,7 @@ export async function previewAssignment(actor: Actor, input: AssignmentInput): P
   const load = await getEditorLoad(prisma, editor.id, today, addDays(today, 7));
   const notes: string[] = [];
   const formatMatch = editor.formats.length === 0 || editor.formats.includes(video.type);
-  const roleSkill: Record<string, string[]> = {
-    EDIT: ["PREMIERE_PRO", "DAVINCI_RESOLVE", "CAPCUT", "AFTER_EFFECTS"],
-    RUSH_PREP: ["RUSH_PREP"],
-    MOTION: ["MOTION_DESIGN", "AFTER_EFFECTS"],
-    SUBTITLES: ["SUBTITLING"],
-    COLOR: ["COLOR_GRADING", "DAVINCI_RESOLVE"],
-    SOUND: ["SOUND_DESIGN"],
-    THUMBNAIL: ["THUMBNAIL"],
-    OTHER: [],
-  };
-  const needed = roleSkill[d.role] ?? [];
+  const needed = ROLE_SKILLS[d.role] ?? [];
   const skillsMatch = needed.length === 0 || needed.some((s) => (editor.skills as string[]).includes(s));
   if (!formatMatch) notes.push("Ce format ne figure pas dans les formats déclarés du prestataire.");
   if (!skillsMatch) notes.push("Aucune compétence déclarée ne correspond à ce rôle.");
@@ -206,7 +212,11 @@ export async function previewAssignment(actor: Actor, input: AssignmentInput): P
   };
 }
 
-export async function assignEditor(actor: Actor, input: AssignmentInput): Promise<{ id: string; warnings: string[] }> {
+export async function assignEditor(
+  actor: Actor,
+  input: AssignmentInput,
+  opts: { notifyEditor?: boolean } = {},
+): Promise<{ id: string; warnings: string[]; dueOn: Date | null }> {
   assertCan(actor, "assignments.write");
   const d = assignmentSchema.parse(input);
   const [video, editor] = await Promise.all([
@@ -216,7 +226,7 @@ export async function assignEditor(actor: Actor, input: AssignmentInput): Promis
   if (!video) throw new NotFoundError("Vidéo introuvable.");
   if (!editor) throw new NotFoundError("Prestataire introuvable.");
   if (editor.status !== "ACTIVE") throw new DomainError("Ce prestataire n'est pas actif.");
-  if (["DELIVERED", "ARCHIVED", "CANCELLED"].includes(video.status)) throw new DomainError("Vidéo clôturée : affectation impossible.");
+  if (CLOSED_STATUSES.includes(video.status)) throw new DomainError("Vidéo clôturée : affectation impossible.");
   const today = await agencyToday();
   const rate = await freezeRate(actor, d, editor.payCurrency);
   const cost = costFor(rate, video);
@@ -225,7 +235,13 @@ export async function assignEditor(actor: Actor, input: AssignmentInput): Promis
   let fx = null;
   if (cost.amount) fx = await resolveFx(prisma, rate.currency, today, str(d.manualFxRate));
 
-  const id = await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
+    // Verrou sur la vidéo : deux affectations simultanées (double clic, deux onglets) sont sérialisées.
+    await lockRow(tx, "Video", video.id);
+    const duplicate = await tx.assignment.count({ where: { videoId: video.id, editorId: editor.id, role: d.role, status: { not: "CANCELLED" } } });
+    if (duplicate > 0) {
+      throw new DomainError(`${editor.displayName} a déjà une mission « ${ASSIGNMENT_ROLE_LABELS[d.role]} » sur cette vidéo.`);
+    }
     if (d.isPrimary) {
       await tx.assignment.updateMany({ where: { videoId: video.id, isPrimary: true }, data: { isPrimary: false } });
     }
@@ -245,7 +261,8 @@ export async function assignEditor(actor: Actor, input: AssignmentInput): Promis
         includedRevisions: rate.includedRevisions,
         estimatedHours: decOrNull(d.estimatedHours)?.toFixed(2) ?? null,
         startOn: dateOrNull(d.startOn),
-        dueOn: dateOrNull(d.dueOn) ?? video.internalDeadline,
+        // Sans date saisie : échéance de la vidéo (interne, sinon client), visible au planning du monteur.
+        dueOn: missionDueDate(dateOrNull(d.dueOn), video),
       },
     });
     if (cost.status !== "ENVELOPE") {
@@ -286,21 +303,215 @@ export async function assignEditor(actor: Actor, input: AssignmentInput): Promis
       entityId: assignment.id,
       after: { editorId: editor.id, videoId: video.id, rate },
     });
-    if (editor.userId) {
+    if (editor.userId && opts.notifyEditor !== false) {
       await notify(tx, {
         userIds: [editor.userId],
         type: "ASSIGNMENT_CREATED",
         title: `Nouvelle mission : ${video.title}`,
-        body: `${video.reference} — échéance ${toDateOnlyString(assignment.dueOn ?? new Date())}`,
+        body: assignment.dueOn ? `${video.reference} — échéance ${formatDateOnly(assignment.dueOn)}` : `${video.reference} — sans échéance`,
         link: `/missions/${video.id}`,
         entityType: "Assignment",
         entityId: assignment.id,
         eventKey: `assignment-created:${assignment.id}`,
       });
     }
-    return assignment.id;
+    return { id: assignment.id, dueOn: assignment.dueOn };
   });
-  return { id, warnings };
+  return { id: result.id, warnings, dueOn: result.dueOn };
+}
+
+export interface BulkAssignOutcome {
+  created: number;
+  refusals: BulkRefusal[];
+  warnings: string[];
+}
+
+/**
+ * Affectation groupée d'un prestataire : une mission par vidéo, au même tarif figé (coût
+ * calculé vidéo par vidéo). Chaque vidéo est contrôlée individuellement (clôture, doublon) ;
+ * le prestataire reçoit une seule notification récapitulative.
+ */
+export async function assignEditorBulk(actor: Actor, input: BulkAssignmentInput): Promise<BulkAssignOutcome> {
+  assertCan(actor, "assignments.write");
+  const d = bulkAssignmentSchema.parse(input);
+  const editor = await prisma.editorProfile.findUnique({ where: { id: d.editorId }, select: { id: true, userId: true, status: true } });
+  if (!editor) throw new NotFoundError("Prestataire introuvable.");
+  if (editor.status !== "ACTIVE") throw new DomainError("Ce prestataire n'est pas actif.");
+  const videos = await prisma.video.findMany({
+    where: { id: { in: [...new Set(d.videoIds)] } },
+    orderBy: { reference: "asc" },
+    select: { id: true, reference: true, title: true, estimatedHours: true },
+  });
+  if (videos.length === 0) throw new NotFoundError("Vidéo introuvable.");
+  const common = {
+    editorId: d.editorId, role: d.role, isPrimary: d.isPrimary, scope: d.scope, rateCardId: d.rateCardId, rateMode: d.rateMode,
+    unitPrice: d.unitPrice, currency: d.currency, quantity: d.quantity, minuteRounding: d.minuteRounding,
+    includedRevisions: d.includedRevisions, startOn: d.startOn, manualFxRate: d.manualFxRate,
+  };
+  const refused: { ref: string; message: string }[] = [];
+  const warnings = new Set<string>();
+  const created: { assignmentId: string; videoId: string; reference: string; title: string }[] = [];
+  for (const v of videos) {
+    try {
+      const r = await assignEditor(
+        actor,
+        {
+          ...common,
+          videoId: v.id,
+          dueOn: d.dueMode === "FIXED" ? d.dueOn : "",
+          estimatedHours: d.estimatedHours || (v.estimatedHours?.toFixed() ?? ""),
+        },
+        { notifyEditor: false },
+      );
+      created.push({ assignmentId: r.id, videoId: v.id, reference: v.reference, title: v.title });
+      for (const w of r.warnings) warnings.add(w);
+    } catch (e) {
+      refused.push({ ref: v.reference, message: refusalMessage(e) });
+    }
+  }
+  if (created.length > 0 && editor.userId) {
+    const first = created[0];
+    await notify(prisma, {
+      userIds: [editor.userId],
+      type: "ASSIGNMENT_CREATED",
+      title: created.length === 1 ? `Nouvelle mission : ${first.title}` : `${created.length} nouvelles missions`,
+      body: `${created.slice(0, 6).map((c) => c.reference).join(", ")}${created.length > 6 ? "…" : ""}`,
+      link: created.length === 1 ? `/missions/${first.videoId}` : "/missions",
+      entityType: "Assignment",
+      entityId: first.assignmentId,
+      eventKey: `assignment-bulk:${first.assignmentId}:${created.length}`,
+    });
+  }
+  return { created: created.length, refusals: groupRefusals(refused), warnings: [...warnings] };
+}
+
+export interface BulkAssignmentPreview {
+  /** Vidéos qui recevront une mission. */
+  eligible: number;
+  /** Vidéos ignorées (clôturées ou déjà confiées à ce prestataire pour ce rôle). */
+  skipped: BulkRefusal[];
+  cost: { amount: string | null; currency: Currency; amountEur: string | null; missing: number; envelope: number; fxMissing: boolean; basis: string } | null;
+  load: { plannedHours: string; addedHours: string; capacityHours: string | null; overloaded: boolean; missingEstimates: number; unavailable: boolean };
+  notes: string[];
+}
+
+/** Aperçu d'une affectation groupée : coût total prévu, charge sur 7 jours, adéquation. */
+export async function previewBulkAssignment(actor: Actor, input: BulkAssignmentInput): Promise<BulkAssignmentPreview> {
+  assertCan(actor, "assignments.write");
+  const d = bulkAssignmentSchema.parse(input);
+  const editor = await prisma.editorProfile.findUnique({ where: { id: d.editorId } });
+  if (!editor) throw new NotFoundError("Prestataire introuvable.");
+  const videos = await prisma.video.findMany({
+    where: { id: { in: [...new Set(d.videoIds)] } },
+    orderBy: { reference: "asc" },
+    select: {
+      id: true, reference: true, type: true, status: true, estimatedHours: true, internalDeadline: true, clientDeadline: true,
+      finalDurationSec: true, expectedDurationSec: true,
+      assignments: { where: { editorId: d.editorId, role: d.role, status: { not: "CANCELLED" } }, select: { id: true } },
+    },
+  });
+  const skipped: { ref: string; message: string }[] = [];
+  const eligible = videos.filter((v) => {
+    if (CLOSED_STATUSES.includes(v.status)) skipped.push({ ref: v.reference, message: "Vidéo clôturée : affectation impossible." });
+    else if (v.assignments.length > 0) skipped.push({ ref: v.reference, message: "Déjà confiée à ce prestataire pour ce rôle." });
+    else return true;
+    return false;
+  });
+
+  const today = await agencyToday();
+  const horizon = addDays(today, 7);
+  const load = await getEditorLoad(prisma, editor.id, today, horizon);
+  let added = new Decimal(0);
+  let missingEstimates = load.missingEstimates;
+  for (const v of eligible) {
+    const due = d.dueMode === "FIXED" ? d.dueOn : missionDueDate(null, { internalDeadline: v.internalDeadline && toDateOnlyString(v.internalDeadline), clientDeadline: v.clientDeadline && toDateOnlyString(v.clientDeadline) });
+    if (due && due > horizon) continue;
+    const hours = decOrNull(d.estimatedHours) ?? (v.estimatedHours ? dec(v.estimatedHours) : null);
+    if (hours) added = added.plus(hours);
+    else missingEstimates += 1;
+  }
+  const plannedAfter = load.plannedHours.plus(added);
+
+  const notes: string[] = [];
+  const offFormat = eligible.filter((v) => editor.formats.length > 0 && !editor.formats.includes(v.type)).length;
+  if (offFormat > 0) notes.push(`${offFormat} vidéo(s) d'un format non déclaré par le prestataire.`);
+  const needed = ROLE_SKILLS[d.role] ?? [];
+  if (needed.length > 0 && !needed.some((s) => (editor.skills as string[]).includes(s))) notes.push("Aucune compétence déclarée ne correspond à ce rôle.");
+  if (load.capacityHours !== null && plannedAfter.gt(load.capacityHours)) notes.push("Surcharge : les heures prévues sur 7 jours dépassent la capacité indicative.");
+  if (load.capacityHours === null) notes.push("Capacité hebdomadaire non renseignée : surcharge non vérifiable.");
+  if (load.unavailable) notes.push("Indisponibilité déclarée sur les 7 prochains jours.");
+
+  let cost: BulkAssignmentPreview["cost"] = null;
+  if (can(actor, "costs.read") && eligible.length === 0) {
+    cost = { amount: null, currency: editor.payCurrency, amountEur: null, missing: 0, envelope: 0, fxMissing: false, basis: "" };
+  } else if (can(actor, "costs.read")) {
+    // Sans droit d'écriture des coûts, l'aperçu suit le tarif du catalogue (prix saisis ignorés).
+    const base = { ...d, videoId: eligible[0].id, dueOn: "" };
+    const safe = can(actor, "costs.write") ? base : { ...base, rateMode: "" as const, unitPrice: "", currency: "" as const, minuteRounding: "" as const };
+    const rate = await freezeRate(actor, safe, editor.payCurrency);
+    let total = new Decimal(0);
+    let missing = 0;
+    let envelope = 0;
+    let basis = "";
+    for (const v of eligible) {
+      const c = costFor(rate, v);
+      basis ||= c.basis;
+      if (c.status === "ENVELOPE") envelope += 1;
+      else if (c.amount) total = total.plus(c.amount);
+      else missing += 1;
+    }
+    let amountEur: string | null = null;
+    let fxMissing = false;
+    if (total.gt(0)) {
+      try {
+        amountEur = convert(total, await resolveFx(prisma, rate.currency, today, str(d.manualFxRate))).toFixed(2);
+      } catch {
+        fxMissing = true;
+      }
+    }
+    cost = { amount: total.gt(0) ? total.toFixed(2) : null, currency: rate.currency, amountEur, missing, envelope, fxMissing, basis };
+  }
+  return {
+    eligible: eligible.length,
+    skipped: groupRefusals(skipped),
+    cost,
+    load: {
+      plannedHours: load.plannedHours.toFixed(1),
+      addedHours: added.toFixed(1),
+      capacityHours: load.capacityHours?.toFixed(1) ?? null,
+      overloaded: load.capacityHours !== null && plannedAfter.gt(load.capacityHours),
+      missingEstimates,
+      unavailable: load.unavailable,
+    },
+    notes,
+  };
+}
+
+/**
+ * Déplacement de l'échéance d'une vidéo : les missions en cours qui la suivaient (même date,
+ * ou sans date) la suivent, avec un historique de déplacement par mission.
+ */
+export async function followVideoDeadline(
+  tx: Db,
+  actor: Actor,
+  videoId: string,
+  before: { internalDeadline: Date | null; clientDeadline: Date | null },
+  after: { internalDeadline: Date | null; clientDeadline: Date | null },
+): Promise<number> {
+  const oldDue = missionDueDate(null, before);
+  const newDue = missionDueDate(null, after);
+  if (!newDue || oldDue?.getTime() === newDue.getTime()) return 0;
+  const missions = await tx.assignment.findMany({
+    where: { videoId, status: { in: ACTIVE_ASSIGNMENT_STATUSES }, dueOn: oldDue },
+    select: { id: true, dueOn: true },
+  });
+  for (const m of missions) {
+    await tx.assignment.update({ where: { id: m.id }, data: { dueOn: newDue, version: { increment: 1 } } });
+    await tx.deadlineChange.create({
+      data: { field: "ASSIGNMENT_DUE", assignmentId: m.id, videoId, oldDate: m.dueOn, newDate: newDue, reason: "Suit l'échéance de la vidéo", actorId: actor.id },
+    });
+  }
+  return missions.length;
 }
 
 export async function updateAssignment(actor: Actor, input: AssignmentUpdateInput) {

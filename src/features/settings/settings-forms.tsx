@@ -227,7 +227,7 @@ export function CatalogItemDialog({ item, trigger }: { item?: CatalogItemInput; 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="max-w-2xl">
+      <DialogContent size="2xl">
         <DialogHeader>
           <DialogTitle>{tr("Prestation du catalogue")}</DialogTitle>
           <DialogDescription>{tr("Prix de vente HT indicatif ; le prix négocié est figé sur chaque vente acceptée.")}</DialogDescription>
@@ -272,7 +272,7 @@ export function TemplateDialog({ item, trigger }: { item?: TemplateInput; trigge
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="max-w-2xl">
+      <DialogContent size="2xl">
         <DialogHeader><DialogTitle>{tr("Modèle de projet")}</DialogTitle></DialogHeader>
         {open ? <TemplateForm item={item} onDone={() => setOpen(false)} /> : null}
       </DialogContent>

@@ -62,19 +62,41 @@ export function SalesOrderForm({
   const clientId = watch("clientId");
   const projectId = watch("projectId");
   const availableVideos = videos.filter((v) => !projectId || v.projectId === projectId);
+  /** Projet choisi : toutes ses vidéos sont cochées d'emblée (une vente « parts égales » sans vidéo n'est répartie sur rien). */
+  const projectAllocations = (pid: string) => videos.filter((v) => v.projectId === pid).map((v) => ({ videoId: v.id, value: "" }));
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-5" noValidate>
       <FormSection title={tr("Vente acceptée")} description={tr("Les prix sont figés à l'acceptation. Les devis non acceptés restent dans la prospection (prévisionnel).")}>
         <FormGrid>
           <Field label={tr("Client")} htmlFor="clientId" required error={err("clientId")}>
-            <NativeSelect {...register("clientId", { onChange: () => setValue("projectId", "") })}>
+            <NativeSelect
+              {...register("clientId", {
+                onChange: () => {
+                  setValue("projectId", "");
+                  lines.fields.forEach((_, i) => {
+                    setValue(`lines.${i}.allocations`, []);
+                    setValue(`lines.${i}.autoAllocate`, false);
+                  });
+                },
+              })}
+            >
               <option value="">{tr("— Choisir —")}</option>
               {clients.map((c) => <option key={c.value} value={c.value}>{tr(c.label)}</option>)}
             </NativeSelect>
           </Field>
           <Field label={tr("Projet")} htmlFor="projectId" hint={tr("Permet de répartir la vente entre ses vidéos.")}>
-            <NativeSelect {...register("projectId")}>
+            <NativeSelect
+              {...register("projectId", {
+                onChange: (e) => {
+                  const pid = e.target.value as string;
+                  lines.fields.forEach((_, i) => {
+                    setValue(`lines.${i}.allocations`, pid ? projectAllocations(pid) : []);
+                    if (!pid) setValue(`lines.${i}.autoAllocate`, false);
+                  });
+                },
+              })}
+            >
               <option value="">{tr("Aucun")}</option>
               {projects.filter((p) => !clientId || p.clientId === clientId).map((p) => <option key={p.value} value={p.value}>{tr(p.label)}</option>)}
             </NativeSelect>
@@ -95,6 +117,7 @@ export function SalesOrderForm({
 
       {lines.fields.map((field, index) => {
         const method = watch(`lines.${index}.allocationMethod`);
+        const auto = !!projectId && method === "EQUAL" && !!watch(`lines.${index}.autoAllocate`);
         const allocations = watch(`lines.${index}.allocations`) ?? [];
         const setAlloc = (next: { videoId: string; value: string }[]) => setValue(`lines.${index}.allocations`, next, { shouldDirty: true });
         return (
@@ -143,7 +166,16 @@ export function SalesOrderForm({
                 </NativeSelect>
               </div>
               <p className="mt-1 text-xs text-faint">{tr("Interne : la somme est exactement égale au net de la ligne (centimes résiduels attribués de façon stable). Jamais ajoutée au prix du pack.")}</p>
-              {method !== "NONE" ? (
+              {projectId && method === "EQUAL" ? (
+                <label className="mt-2 flex items-start gap-2 text-sm">
+                  <input type="checkbox" {...register(`lines.${index}.autoAllocate`)} className="mt-1 accent-[var(--av-accent)]" />
+                  <span>
+                    {tr("Forfait : répartir automatiquement sur toutes les vidéos actives du projet")}
+                    <span className="block text-xs text-subtle">{tr("Les vidéos ajoutées ou annulées plus tard sont prises en compte (parts égales recalculées).")}</span>
+                  </span>
+                </label>
+              ) : null}
+              {auto ? null : method !== "NONE" ? (
                 availableVideos.length === 0 ? (
                   <p className="mt-2 text-sm text-warning">{tr("Choisissez un projet contenant des vidéos pour répartir la vente.")}</p>
                 ) : (
@@ -190,7 +222,7 @@ export function SalesOrderForm({
           </FormSection>
         );
       })}
-      <Button type="button" variant="outline" className="self-start" onClick={() => lines.append(emptyLine())}>
+      <Button type="button" variant="outline" className="self-start" onClick={() => lines.append({ ...emptyLine(), allocations: projectId ? projectAllocations(projectId) : [] })}>
         <Plus aria-hidden /> {" "}{tr("Ajouter une ligne")}</Button>
       <FormActions pending={pending} submitLabel={tr("Enregistrer la vente")} cancelHref="/finances?onglet=ventes" />
     </form>

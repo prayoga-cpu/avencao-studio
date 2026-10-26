@@ -135,7 +135,7 @@ export async function getProjectsFinancials(db: Db, projectIds: string[]): Promi
   return out;
 }
 
-/** Charge planifiée d'un prestataire : heures estimées des missions actives à échéance dans la fenêtre. */
+/** Charge planifiée d'un prestataire : heures estimées des missions actives (en retard ou) à échéance dans la fenêtre. */
 export async function getEditorLoad(db: Db, editorId: string, fromIso: string, toIso: string) {
   const [editor, assignments, unavailable] = await Promise.all([
     db.editorProfile.findUnique({ where: { id: editorId }, select: { weeklyCapacityHours: true } }),
@@ -143,7 +143,8 @@ export async function getEditorLoad(db: Db, editorId: string, fromIso: string, t
       where: {
         editorId,
         status: { in: ["PLANNED", "IN_PROGRESS"] },
-        OR: [{ dueOn: null }, { dueOn: { gte: new Date(`${fromIso}T00:00:00Z`), lte: new Date(`${toIso}T00:00:00Z`) } }],
+        // Une mission en retard reste à faire : elle pèse sur la charge comme une mission à venir.
+        OR: [{ dueOn: null }, { dueOn: { lte: new Date(`${toIso}T00:00:00Z`) } }],
       },
       select: { estimatedHours: true, dueOn: true },
     }),

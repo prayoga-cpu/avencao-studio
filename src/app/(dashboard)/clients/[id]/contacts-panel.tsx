@@ -45,7 +45,7 @@ function ContactDialog({ clientId, contact, open, onOpenChange }: { clientId: st
   });
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>{contact ? tr("Modifier le contact") : tr("Nouveau contact")}</DialogTitle>
         </DialogHeader>

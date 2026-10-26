@@ -23,7 +23,7 @@ export function RateCardDialog({ editorId, defaults, today, trigger }: { editorI
             <Plus aria-hidden /> {" "}{tr("Nouveau tarif")}</Button>
         )}
       </DialogTrigger>
-      <DialogContent className="max-w-2xl">
+      <DialogContent size="2xl">
         <DialogHeader>
           <DialogTitle>{tr("Tarif négocié")}</DialogTitle>
           <DialogDescription>{tr("Le tarif est copié dans chaque mission au moment de l'affectation : le modifier ne change pas les missions existantes.")}</DialogDescription>

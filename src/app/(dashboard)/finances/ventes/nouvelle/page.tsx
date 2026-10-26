@@ -37,7 +37,9 @@ export default async function NewSalePage(props: PageProps<"/finances/ventes/nou
         defaults={{
           clientId: project?.clientId ?? (typeof params.client === "string" ? params.client : ""),
           projectId, opportunityId: typeof params.opportunite === "string" ? params.opportunite : "",
-          title: project ? project.label.split(" — ").slice(1).join(" — ") : "", acceptedOn: today, currency: "EUR", manualFxRate: "", notes: "", lines: [emptyLine()],
+          title: project ? project.label.split(" — ").slice(1).join(" — ") : "", acceptedOn: today, currency: "EUR", manualFxRate: "", notes: "",
+          // Depuis un projet : ses vidéos sont cochées d'emblée (répartition à parts égales).
+          lines: [{ ...emptyLine(), allocations: projectId ? videos.filter((v) => v.projectId === projectId).map((v) => ({ videoId: v.id, value: "" })) : [] }],
         }}
       />
     </div>

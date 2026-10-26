@@ -47,13 +47,30 @@ function DialogOverlay({
   )
 }
 
+/**
+ * Largeur maximale à partir de 640 px. Passer une taille plutôt qu'une classe `max-w-*` :
+ * une classe sans préfixe ne s'appliquerait que sous 640 px (le préfixe `sm:` l'emporte).
+ */
+const DIALOG_SIZES = {
+  sm: "sm:max-w-sm",
+  md: "sm:max-w-md",
+  lg: "sm:max-w-lg",
+  xl: "sm:max-w-xl",
+  "2xl": "sm:max-w-2xl",
+  "3xl": "sm:max-w-3xl",
+} as const
+
+export type DialogSize = keyof typeof DIALOG_SIZES
+
 function DialogContent({
   className,
   children,
   showCloseButton = true,
+  size = "md",
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
+  size?: DialogSize
 }) {
   return (
     <DialogPortal>
@@ -61,7 +78,13 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          // Mobile d'abord : feuille ancrée en bas, pleine largeur, défilement interne (zone sûre iOS).
+          // --dialog-pb : marge basse, que les barres de boutons collantes compensent pour rester au ras du bord.
+          "fixed right-0 bottom-0 left-0 z-50 grid max-h-[92dvh] w-full gap-4 overflow-y-auto overscroll-contain rounded-t-2xl bg-popover p-4 pb-(--dialog-pb) text-sm text-popover-foreground ring-1 ring-foreground/10 outline-none [--dialog-pb:max(1rem,env(safe-area-inset-bottom))] [--form-actions-bg:var(--popover)] av-scroll",
+          // ≥ 640 px : fenêtre centrée, jamais plus haute que l'écran.
+          "sm:top-1/2 sm:right-auto sm:bottom-auto sm:left-1/2 sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100%-2rem)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:[--dialog-pb:1rem]",
+          DIALOG_SIZES[size],
+          "duration-150 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 max-sm:data-open:slide-in-from-bottom-10 max-sm:data-closed:slide-out-to-bottom-10 sm:data-open:zoom-in-95 sm:data-closed:zoom-out-95",
           className
         )}
         {...props}
@@ -71,7 +94,7 @@ function DialogContent({
           <DialogPrimitive.Close data-slot="dialog-close" asChild>
             <Button
               variant="ghost"
-              className="absolute top-2 right-2"
+              className="absolute top-2 right-2 max-sm:size-10"
               size="icon-sm"
             >
               <XIcon
@@ -89,7 +112,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-2", className)}
+      className={cn("flex min-w-0 flex-col gap-2 pr-10 sm:pr-8", className)}
       {...props}
     />
   )
@@ -107,7 +130,9 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "-mx-4 -mb-4 flex flex-col-reverse gap-2 rounded-b-xl border-t bg-muted/50 p-4 sm:flex-row sm:justify-end",
+        // Collé au ras du bas de la fenêtre quand le contenu défile (le collant s'arrête sinon à la marge
+        // intérieure) ; fond opaque pour masquer ce qui passe dessous.
+        "sticky bottom-[calc(var(--dialog-pb,0px)*-1)] z-10 -mx-4 -mb-(--dialog-pb) flex flex-col-reverse gap-2 border-t bg-popover p-4 pb-(--dialog-pb) sm:flex-row sm:justify-end sm:rounded-b-xl",
         className
       )}
       {...props}

@@ -92,8 +92,22 @@ export const transitionSchema = z.object({
   to: z.enum(VIDEO_STATUS_VALUES),
   reason: zText(500),
   revenueTreatment: z.enum(["KEEP", "CANCEL"]).optional(),
+  /** Administrateur : étape hors workflow, motif obligatoire (tracée comme exception). */
+  force: z.boolean().optional(),
 });
 export type TransitionInput = z.input<typeof transitionSchema>;
+
+/** Plafond d'un changement d'étape groupé (chaque vidéo est contrôlée une à une). */
+export const BULK_STEP_MAX = 200;
+
+export const bulkVideoSchema = z.object({
+  ids: z.array(zRequired("Vidéo", 64)).min(1, "Sélectionnez au moins une vidéo.").max(500, "500 vidéos maximum par action groupée."),
+  to: z.enum(VIDEO_STATUS_VALUES).optional(),
+  priority: z.enum(PRIORITIES).optional(),
+  reason: zText(500),
+  force: z.boolean().optional(),
+});
+export type BulkVideoInput = z.input<typeof bulkVideoSchema>;
 
 export const blockSchema = z.object({
   videoId: zRequired("Vidéo", 64),
@@ -157,6 +171,20 @@ export const assignmentSchema = z.object({
   manualFxRate: zRate,
 });
 export type AssignmentInput = z.input<typeof assignmentSchema>;
+
+/**
+ * Affectation groupée d'un prestataire à plusieurs vidéos : même tarif figé, coût calculé
+ * vidéo par vidéo. Échéance : celle de chaque vidéo (interne, sinon client) ou une date fixe.
+ */
+export const bulkAssignmentSchema = assignmentSchema
+  .omit({ videoId: true, dueOn: true })
+  .extend({
+    videoIds: z.array(zRequired("Vidéo", 64)).min(1, "Sélectionnez au moins une vidéo.").max(100, "100 vidéos maximum par affectation groupée."),
+    dueMode: z.enum(["VIDEO", "FIXED"]),
+    dueOn: zDate,
+  })
+  .refine((d) => d.dueMode === "VIDEO" || d.dueOn !== "", { path: ["dueOn"], message: "Indiquez l'échéance de la mission." });
+export type BulkAssignmentInput = z.input<typeof bulkAssignmentSchema>;
 
 export const assignmentUpdateSchema = z.object({
   id: zRequired("Mission", 64),

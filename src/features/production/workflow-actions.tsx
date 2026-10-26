@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Ban, Loader2, ShieldAlert } from "lucide-react";
+import { NativeSelect } from "@/components/app/field";
 import { useAction } from "@/components/app/use-action";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -17,16 +18,31 @@ export interface TransitionOption {
   to: VideoStatus;
   requiresReason: boolean;
   hint?: string;
+  /** Étape forcée hors workflow (administrateur, motif obligatoire). */
+  force?: boolean;
 }
 
-/** Boutons d'étape : seules les transitions autorisées par le workflow et le rôle sont proposées. */
-export function WorkflowActions({ videoId, options, hasRevenue }: { videoId: string; options: TransitionOption[]; hasRevenue: boolean }) {
+/**
+ * Boutons d'étape : seules les transitions autorisées par le workflow et le rôle sont proposées.
+ * Un administrateur peut en plus forcer une autre étape, avec motif (tracé comme exception).
+ */
+export function WorkflowActions({
+  videoId,
+  options,
+  hasRevenue,
+  forceTargets = [],
+}: {
+  videoId: string;
+  options: TransitionOption[];
+  hasRevenue: boolean;
+  forceTargets?: VideoStatus[];
+}) {
   const tr = useT();
   const [target, setTarget] = useState<TransitionOption | null>(null);
   const [reason, setReason] = useState("");
   const [revenue, setRevenue] = useState<"KEEP" | "CANCEL">("CANCEL");
   const { pending, run } = useAction();
-  if (options.length === 0) return <p className="text-sm text-subtle">{tr("Aucune transition disponible depuis cette étape pour votre rôle.")}</p>;
+  if (options.length === 0 && forceTargets.length === 0) return <p className="text-sm text-subtle">{tr("Aucune transition disponible depuis cette étape pour votre rôle.")}</p>;
   const go = (opt: TransitionOption) => {
     if (opt.requiresReason || opt.to === "CANCELLED") {
       setReason("");
@@ -52,6 +68,23 @@ export function WorkflowActions({ videoId, options, hasRevenue }: { videoId: str
             {o.to === "CANCELLED" ? tr("Annuler la vidéo") : `→ ${tr(VIDEO_STATUS[o.to].label)}`}
           </Button>
         ))}
+        {forceTargets.length ? (
+          <NativeSelect
+            aria-label={tr("Forcer l'étape (administrateur)")}
+            className="h-7 w-auto text-xs"
+            value=""
+            disabled={pending}
+            onChange={(e) => {
+              const to = e.target.value as VideoStatus;
+              if (!to) return;
+              setReason("");
+              setTarget({ to, requiresReason: true, force: true, hint: tr("Étape hors workflow : réservée aux administrateurs, enregistrée comme exception avec votre motif.") });
+            }}
+          >
+            <option value="">{tr("Forcer l'étape…")}</option>
+            {forceTargets.map((s) => <option key={s} value={s}>{tr(VIDEO_STATUS[s].label)}</option>)}
+          </NativeSelect>
+        ) : null}
       </div>
       <Dialog open={!!target} onOpenChange={(v) => !v && setTarget(null)}>
         <DialogContent>
@@ -86,7 +119,7 @@ export function WorkflowActions({ videoId, options, hasRevenue }: { videoId: str
               disabled={pending || reason.trim().length < 3}
               onClick={() =>
                 target &&
-                run(() => transitionVideoAction({ videoId, to: target.to, reason, revenueTreatment: target.to === "CANCELLED" ? revenue : undefined }), {
+                run(() => transitionVideoAction({ videoId, to: target.to, reason, revenueTreatment: target.to === "CANCELLED" ? revenue : undefined, force: target.force }), {
                   onSuccess: () => setTarget(null),
                 })
               }

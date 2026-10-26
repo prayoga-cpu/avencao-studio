@@ -9,6 +9,7 @@ import type {
   ExchangeRateInput,
   ExpenseInput,
   InvoiceInput,
+  ProjectPriceInput,
   ReallocateInput,
   RefundInput,
   RetainerInput,
@@ -36,6 +37,9 @@ function done<T>(r: T): T {
 
 export async function createSalesOrderAction(input: SalesOrderInput) {
   return safeAction(async () => done(await sales.createSalesOrder(await actorFor("sales.write"), input)), "Vente enregistrée.");
+}
+export async function setProjectPriceAction(input: ProjectPriceInput) {
+  return safeAction(async () => done(await sales.setProjectPrice(await actorFor("sales.write"), input)), "Prix du projet enregistré.");
 }
 export async function reallocateLineAction(input: ReallocateInput) {
   return safeAction(async () => done(await sales.reallocateLine(await actorFor("sales.write"), input)), "Répartition enregistrée.");

@@ -29,12 +29,15 @@ export interface EditorChoice {
 export function AssignDialog({
   videoId,
   internalDeadline,
+  clientDeadline = "",
   estimatedHours,
   editors,
   canSetPrice,
 }: {
   videoId: string;
   internalDeadline: string;
+  /** Échéance de repli de la mission quand la vidéo n'a pas de deadline interne. */
+  clientDeadline?: string;
   estimatedHours: string;
   editors: EditorChoice[];
   canSetPrice: boolean;
@@ -47,13 +50,13 @@ export function AssignDialog({
         <Button size="sm">
           <UserPlus aria-hidden /> {" "}{tr("Affecter un prestataire")}</Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[92dvh] max-w-3xl overflow-y-auto">
+      <DialogContent size="3xl">
         <DialogHeader>
           <DialogTitle>{tr("Affecter un prestataire")}</DialogTitle>
           <DialogDescription>{tr("Le tarif est copié dans la mission : une modification ultérieure du catalogue ne la change pas. Les indications sont explicables (compétences, charge, coût) — pas d'IA de matching.")}</DialogDescription>
         </DialogHeader>
         {open ? (
-          <AssignForm videoId={videoId} internalDeadline={internalDeadline} estimatedHours={estimatedHours} editors={editors} canSetPrice={canSetPrice} onDone={() => setOpen(false)} />
+          <AssignForm videoId={videoId} dueOn={internalDeadline || clientDeadline} estimatedHours={estimatedHours} editors={editors} canSetPrice={canSetPrice} onDone={() => setOpen(false)} />
         ) : null}
       </DialogContent>
     </Dialog>
@@ -62,14 +65,14 @@ export function AssignDialog({
 
 function AssignForm({
   videoId,
-  internalDeadline,
+  dueOn,
   estimatedHours,
   editors,
   canSetPrice,
   onDone,
 }: {
   videoId: string;
-  internalDeadline: string;
+  dueOn: string;
   estimatedHours: string;
   editors: EditorChoice[];
   canSetPrice: boolean;
@@ -80,7 +83,7 @@ function AssignForm({
   const [previewing, startPreview] = useTransition();
   const defaults: AssignmentInput = {
     videoId, editorId: "", role: "EDIT", isPrimary: true, scope: "", rateCardId: "", rateMode: "", unitPrice: "", currency: "",
-    quantity: "", minuteRounding: "", includedRevisions: "", estimatedHours, startOn: "", dueOn: internalDeadline, manualFxRate: "",
+    quantity: "", minuteRounding: "", includedRevisions: "", estimatedHours, startOn: "", dueOn, manualFxRate: "",
   };
   const { form, onSubmit, pending, err } = useServerForm({
     schema: assignmentSchema,
@@ -176,7 +179,7 @@ function AssignForm({
       <FormGrid className="md:grid-cols-3">
         <Field label={tr("Heures estimées")} htmlFor="estimatedHours" error={err("estimatedHours")}><Input inputMode="decimal" {...register("estimatedHours")} /></Field>
         <Field label={tr("Début")} htmlFor="startOn" error={err("startOn")}><Input type="date" {...register("startOn")} /></Field>
-        <Field label={tr("Échéance de la mission")} htmlFor="dueOn" error={err("dueOn")}><Input type="date" {...register("dueOn")} /></Field>
+        <Field label={tr("Échéance de la mission")} htmlFor="dueOn" error={err("dueOn")} hint={tr("Vide : deadline interne de la vidéo, sinon sa deadline client.")}><Input type="date" {...register("dueOn")} /></Field>
         <Field label={tr("Périmètre")} htmlFor="scope" className="md:col-span-3"><Input {...register("scope")} placeholder={tr("Ex. montage + sous-titres, hors miniature")} /></Field>
       </FormGrid>
       <label className="flex items-center gap-2 text-sm">

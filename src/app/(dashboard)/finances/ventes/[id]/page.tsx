@@ -55,8 +55,8 @@ export default async function SalePage(props: PageProps<"/finances/ventes/[id]">
               <Section
                 key={l.id}
                 title={l.description}
-                description={`${l.quantity.toFixed()} × ${l.unitPrice.toFixed(2)} ${o.currency}${dec(l.discountAmount).gt(0) ? ` − remise ${l.discountAmount.toFixed(2)}` : ""}${l.videoType ? ` · ${tr(VIDEO_TYPE_LABELS[l.videoType])}` : ""}`}
-                actions={canWrite && o.status === "ACCEPTED" ? <>{net.gt(0) ? <ReallocateDialog lineId={l.id} method={l.allocationMethod} net={net.toFixed(2)} videos={videos} current={l.allocations.map((a) => ({ videoId: a.videoId, weight: a.weight?.toFixed() ?? null, amount: a.amount.toFixed(2) }))} /> : null}{net.gt(0) ? <CancelLineDialog lineId={l.id} max={net.toFixed(2)} today={today} /> : null}</> : null}
+                description={`${l.quantity.toFixed()} × ${l.unitPrice.toFixed(2)} ${o.currency}${dec(l.discountAmount).gt(0) ? ` − remise ${l.discountAmount.toFixed(2)}` : ""}${l.videoType ? ` · ${tr(VIDEO_TYPE_LABELS[l.videoType])}` : ""}${l.autoAllocate ? ` · ${tr("forfait réparti automatiquement")}` : ""}`}
+                actions={canWrite && o.status === "ACCEPTED" ? <>{net.gt(0) ? <ReallocateDialog lineId={l.id} method={l.allocationMethod} net={net.toFixed(2)} videos={videos} autoAllocate={l.autoAllocate} hasProject={!!o.project} current={l.allocations.map((a) => ({ videoId: a.videoId, weight: a.weight?.toFixed() ?? null, amount: a.amount.toFixed(2) }))} /> : null}{net.gt(0) ? <CancelLineDialog lineId={l.id} max={net.toFixed(2)} today={today} /> : null}</> : null}
               >
                 <DefinitionList
                   items={[

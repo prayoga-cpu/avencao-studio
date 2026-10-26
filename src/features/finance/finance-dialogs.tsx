@@ -51,7 +51,7 @@ function FormDialog<T extends Record<string, string>>({
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (v) setValues(initial); }}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="max-w-xl">
+      <DialogContent size="xl">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description ? <DialogDescription asChild><div>{description}</div></DialogDescription> : null}
@@ -254,15 +254,21 @@ export function ReallocateDialog({
   current,
   videos,
   net,
+  autoAllocate = false,
+  hasProject = false,
 }: {
   lineId: string;
   method: "EQUAL" | "WEIGHTED" | "MANUAL";
   current: { videoId: string; weight: string | null; amount: string }[];
   videos: { id: string; reference: string; title: string }[];
   net: string;
+  /** Forfait : parts égales sur toutes les vidéos actives du projet, recalculées automatiquement. */
+  autoAllocate?: boolean;
+  hasProject?: boolean;
 }) {
   const tr = useT();
   const [open, setOpen] = useState(false);
+  const [auto, setAuto] = useState(autoAllocate);
   const [m, setM] = useState<"EQUAL" | "WEIGHTED" | "MANUAL" | "NONE">(method);
   const [rows, setRows] = useState(current.map((c) => ({ videoId: c.videoId, value: m === "MANUAL" ? c.amount : (c.weight ?? "") })));
   const { pending, run } = useAction();
@@ -270,18 +276,29 @@ export function ReallocateDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild><Button size="xs" variant="outline">{tr("Répartir")}</Button></DialogTrigger>
-      <DialogContent className="max-w-xl">
+      <DialogContent size="xl">
         <DialogHeader>
           <DialogTitle>{tr("Répartition analytique")}</DialogTitle>
           <DialogDescription>{tr("Net à répartir :")}{" "}{net}{tr(". Somme exacte garantie ; n'affecte ni les ventes signées ni la facturation.")}</DialogDescription>
         </DialogHeader>
-        <NativeSelect aria-label={tr("Méthode")} value={m} onChange={(e) => setM(e.target.value as typeof m)}>
-          <option value="EQUAL">{tr("Parts égales")}</option>
-          <option value="WEIGHTED">{tr("Pondération")}</option>
-          <option value="MANUAL">{tr("Montants manuels")}</option>
-          <option value="NONE">{tr("Retirer la répartition")}</option>
-        </NativeSelect>
-        {m !== "NONE" ? (
+        {hasProject ? (
+          <label className="flex items-start gap-2 rounded-lg border border-border p-3 text-sm">
+            <input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} className="mt-1 accent-[var(--av-accent)]" />
+            <span>
+              <span className="block font-semibold">{tr("Répartition automatique (forfait)")}</span>
+              <span className="block text-xs text-subtle">{tr("Parts égales sur toutes les vidéos actives du projet, recalculées quand une vidéo est ajoutée ou annulée.")}</span>
+            </span>
+          </label>
+        ) : null}
+        {!auto ? (
+          <NativeSelect aria-label={tr("Méthode")} value={m} onChange={(e) => setM(e.target.value as typeof m)}>
+            <option value="EQUAL">{tr("Parts égales")}</option>
+            <option value="WEIGHTED">{tr("Pondération")}</option>
+            <option value="MANUAL">{tr("Montants manuels")}</option>
+            <option value="NONE">{tr("Retirer la répartition")}</option>
+          </NativeSelect>
+        ) : null}
+        {!auto && m !== "NONE" ? (
           <ul className="flex max-h-72 flex-col gap-1.5 overflow-y-auto av-scroll">
             {videos.map((v) => {
               const row = rows.find((r) => r.videoId === v.id);
@@ -295,10 +312,17 @@ export function ReallocateDialog({
             })}
           </ul>
         ) : null}
-        {m === "MANUAL" ? <p className="text-xs text-subtle">{tr("Total saisi :")}{" "}{manualTotal.toFixed(2)} / {net}</p> : null}
+        {!auto && m === "MANUAL" ? <p className="text-xs text-subtle">{tr("Total saisi :")}{" "}{manualTotal.toFixed(2)} / {net}</p> : null}
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>{tr("Annuler")}</Button>
-          <Button disabled={pending} onClick={() => run(() => reallocateLineAction({ lineId, allocationMethod: m, allocations: m === "NONE" ? [] : rows }), { onSuccess: () => setOpen(false) })}>
+          <Button
+            disabled={pending}
+            onClick={() =>
+              run(() => reallocateLineAction(auto ? { lineId, allocationMethod: "EQUAL", allocations: [], autoAllocate: true } : { lineId, allocationMethod: m, allocations: m === "NONE" ? [] : rows }), {
+                onSuccess: () => setOpen(false),
+              })
+            }
+          >
             {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}
             {tr("Enregistrer")}</Button>
         </DialogFooter>

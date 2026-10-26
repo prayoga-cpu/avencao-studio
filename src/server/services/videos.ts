@@ -3,23 +3,27 @@ import "server-only";
  * Workflow vidéo, versions, retours, checklist, liens et temps passé.
  * Aucune transition de production ne crée ni ne simule un mouvement financier.
  */
-import type { FeedbackInput, LinkInput, ReviewInput, TimeEntryInput, TransitionInput, VersionInput } from "@/features/production/schemas";
-import { blockSchema, feedbackSchema, linkSchema, reviewSchema, timeEntrySchema, transitionSchema, versionSchema } from "@/features/production/schemas";
+import type { BulkVideoInput, FeedbackInput, LinkInput, ReviewInput, TimeEntryInput, TransitionInput, VersionInput } from "@/features/production/schemas";
+import {
+  BULK_STEP_MAX, blockSchema, bulkVideoSchema, feedbackSchema, linkSchema, reviewSchema, timeEntrySchema, transitionSchema, versionSchema,
+} from "@/features/production/schemas";
 import type { VideoStatus } from "@/generated/prisma/enums";
 import { VIDEO_STATUS } from "@/lib/labels";
 import { parseDateOnly } from "@/lib/dates";
 import { dec, parseDecimalInput, sum } from "@/lib/money";
 import { recordAudit } from "../audit";
+import { groupRefusals, refusalMessage, type BulkRefusal } from "../bulk";
 import { str } from "../convert";
 import { prisma, type Tx } from "../db";
 import { DomainError, ForbiddenError, NotFoundError } from "../errors";
-import { checkTransition, type WorkflowActor } from "../domain/video-workflow";
+import { CLOSED_VIDEO_STATUSES, checkTransition, type WorkflowActor } from "../domain/video-workflow";
 import { isBelowThreshold } from "../domain/profitability";
 import { notify, staffUserIds, adminUserIds } from "../notifications";
 import { can, isStaff, type Actor } from "../policies";
 import { getSettings } from "../settings";
 import { agencyToday } from "./common";
 import { getVideosFinancials } from "./profitability";
+import { syncProjectAutoAllocations } from "./sales";
 
 async function editorIsAssigned(actor: Actor, videoId: string): Promise<boolean> {
   if (!actor.editorId) return false;
@@ -44,6 +48,7 @@ async function assignedEditorUserIds(tx: Tx, videoId: string): Promise<string[]>
 
 export async function transitionVideo(actor: Actor, input: TransitionInput) {
   const d = transitionSchema.parse(input);
+  if (d.force && actor.role !== "ADMIN") throw new ForbiddenError("Seul un administrateur peut forcer une étape.");
   const kind = await workflowActor(actor, d.videoId);
   const video = await prisma.video.findUnique({
     where: { id: d.videoId },
@@ -64,18 +69,26 @@ export async function transitionVideo(actor: Actor, input: TransitionInput) {
     hasRecordedApproval: approvedVersion > 0 || !!video.approvedAt,
     editorIsAssigned: kind === "editor",
     hasSubmittedVersion: kind === "editor" ? editorVersions > 0 && video.versions[0]?.status === "PENDING" : true,
-  });
+  }, { force: d.force });
   if (!check.ok) throw new DomainError(check.error!);
-  await applyTransition(actor, video.id, video.status, d.to, { reason: str(d.reason), isOverride: !!check.isOverride, revenueTreatment: d.revenueTreatment });
+  await applyTransition(actor, video.id, video.status, d.to, {
+    reason: str(d.reason),
+    isOverride: !!check.isOverride,
+    isForced: !!check.isForced,
+    revenueTreatment: d.revenueTreatment,
+  });
   return { id: video.id };
 }
+
+const DELIVERED_STATES: VideoStatus[] = ["DELIVERED", "ARCHIVED"];
+const APPROVED_STATES: VideoStatus[] = ["APPROVED", "DELIVERED", "ARCHIVED"];
 
 async function applyTransition(
   actor: Actor,
   videoId: string,
   from: VideoStatus,
   to: VideoStatus,
-  opts: { reason: string | null; isOverride: boolean; revenueTreatment?: "KEEP" | "CANCEL" },
+  opts: { reason: string | null; isOverride: boolean; isForced?: boolean; revenueTreatment?: "KEEP" | "CANCEL" },
 ) {
   const now = new Date();
   await prisma.$transaction(async (tx) => {
@@ -93,11 +106,10 @@ async function applyTransition(
       data.cancelledAt = null;
       data.cancelReason = null;
     }
-    if ((from === "DELIVERED" || from === "APPROVED") && to === "CLIENT_CHANGES") {
-      data.deliveredAt = null;
-      data.approvedAt = null;
-    }
-    await tx.video.update({ where: { id: videoId }, data });
+    // Retour en arrière (réouverture ou étape forcée) : la livraison / validation n'est plus acquise.
+    if (DELIVERED_STATES.includes(from) && !DELIVERED_STATES.includes(to)) data.deliveredAt = null;
+    if (APPROVED_STATES.includes(from) && !APPROVED_STATES.includes(to)) data.approvedAt = null;
+    const updated = await tx.video.update({ where: { id: videoId }, data, select: { projectId: true } });
     await tx.videoStatusEvent.create({
       data: { videoId, fromStatus: from, toStatus: to, actorId: actor.id, reason: opts.reason, isOverride: opts.isOverride },
     });
@@ -130,10 +142,12 @@ async function applyTransition(
       });
       if (opts.revenueTreatment === "CANCEL") await cancelVideoRevenue(tx, actor, videoId, opts.reason ?? "Vidéo annulée");
     }
+    // Forfait projet réparti automatiquement : la part d'une vidéo annulée revient aux vidéos actives.
+    if (to === "CANCELLED" || from === "CANCELLED") await syncProjectAutoAllocations(tx, actor.id, updated.projectId);
     if (to === "DELIVERED") await afterDelivery(tx, videoId);
     await recordAudit(tx, {
       actorId: actor.id,
-      action: opts.isOverride ? "video.deliver_override" : "video.transition",
+      action: opts.isForced ? "video.force_status" : opts.isOverride ? "video.deliver_override" : "video.transition",
       entityType: "Video",
       entityId: videoId,
       before: { status: from },
@@ -225,6 +239,68 @@ export async function setBlocked(actor: Actor, input: { videoId: string; blocked
     await recordAudit(tx, { actorId: actor.id, action: d.blocked ? "video.block" : "video.unblock", entityType: "Video", entityId: d.videoId, reason: str(d.reason) });
   });
   return { id: d.videoId };
+}
+
+export interface BulkVideoOutcome {
+  /** Vidéos dont la priorité a changé. */
+  prioritized: number;
+  /** Vidéos passées à la nouvelle étape. */
+  moved: number;
+  /** Refus regroupés par motif, avec les références concernées. */
+  refusals: BulkRefusal[];
+}
+
+/**
+ * Action groupée : priorité (vidéos non clôturées) et/ou étape. Chaque changement d'étape
+ * passe par le workflow et les droits, vidéo par vidéo ; les refus sont regroupés par motif.
+ */
+export async function bulkUpdateVideos(actor: Actor, input: BulkVideoInput): Promise<BulkVideoOutcome> {
+  if (!can(actor, "videos.write")) throw new ForbiddenError();
+  const d = bulkVideoSchema.parse(input);
+  if (!d.priority && !d.to) throw new DomainError("Choisissez une priorité ou une étape.");
+  if (d.force && actor.role !== "ADMIN") throw new ForbiddenError("Seul un administrateur peut forcer une étape.");
+  if (d.force && !str(d.reason)) throw new DomainError("Un motif est obligatoire pour forcer une étape.");
+  const ids = [...new Set(d.ids)];
+  if (d.to && ids.length > BULK_STEP_MAX) throw new DomainError(`${BULK_STEP_MAX} vidéos maximum pour un changement d'étape groupé.`);
+  const videos = await prisma.video.findMany({
+    where: { id: { in: ids } },
+    orderBy: { reference: "asc" },
+    select: { id: true, reference: true, status: true, priority: true },
+  });
+  if (videos.length === 0) throw new NotFoundError();
+  const refused: { ref: string; message: string }[] = [];
+
+  let prioritized = 0;
+  if (d.priority) {
+    const priority = d.priority;
+    const closed = (s: VideoStatus) => CLOSED_VIDEO_STATUSES.includes(s);
+    for (const v of videos) if (closed(v.status)) refused.push({ ref: v.reference, message: "Vidéo clôturée : priorité inchangée." });
+    const targets = videos.filter((v) => !closed(v.status) && v.priority !== priority);
+    if (targets.length) {
+      await prisma.$transaction(async (tx) => {
+        await tx.video.updateMany({ where: { id: { in: targets.map((v) => v.id) } }, data: { priority, version: { increment: 1 } } });
+        await tx.auditEvent.createMany({
+          data: targets.map((v) => ({
+            actorId: actor.id, action: "video.priority", entityType: "Video", entityId: v.id, before: { priority: v.priority }, after: { priority },
+          })),
+        });
+      });
+      prioritized = targets.length;
+    }
+  }
+
+  let moved = 0;
+  if (d.to) {
+    for (const v of videos) {
+      try {
+        await transitionVideo(actor, { videoId: v.id, to: d.to, reason: d.reason, force: d.force });
+        moved += 1;
+      } catch (e) {
+        refused.push({ ref: v.reference, message: refusalMessage(e) });
+      }
+    }
+  }
+  return { prioritized, moved, refusals: groupRefusals(refused) };
 }
 
 export async function addLink(actor: Actor, input: LinkInput) {

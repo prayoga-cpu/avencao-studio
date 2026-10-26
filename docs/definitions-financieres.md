@@ -31,6 +31,21 @@ Annulation d'une vidéo vendue : l'utilisateur choisit explicitement (1) revenu 
 (dédommagement dû) ou (2) revenu annulé sur la ligne. Depuis la vente, une part peut aussi être
 annulée ou réaffectée aux autres vidéos de la ligne (au prorata ou manuellement). Rien n'est supprimé ; la ligne garde la trace du montant annulé et de sa date.
 
+### Prix d'un projet entier
+
+Le bouton « Prix du projet » (fiche projet) enregistre une vente acceptée d'une ligne, rattachée
+au projet — la vente reste la source unique du chiffre d'affaires :
+
+- **Forfait global** : quantité 1, ligne « répartie automatiquement ». Le net restant est réparti à
+  parts égales sur toutes les vidéos non annulées du projet, et recalculé à chaque ajout, annulation
+  ou réouverture de vidéo (audit `sales.auto_reallocate`). Une vidéo annulée avec revenu maintenu
+  rend sa part aux autres vidéos ; avec revenu annulé, sa part est retirée de la vente.
+- **Prix par vidéo** : quantité = vidéos actives, prix unitaire figé, réparti sur ces vidéos. Une
+  vidéo ajoutée ensuite fait l'objet d'une nouvelle vente (le prix accepté n'est jamais réécrit).
+
+Une répartition manuelle (pondérée ou en montants) désactive la répartition automatique ; elle se
+réactive depuis la vente (« Répartir » › « Répartition automatique (forfait) »).
+
 ## Coûts des missions
 
 | Mode | Calcul |

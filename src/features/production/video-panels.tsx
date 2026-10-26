@@ -539,7 +539,7 @@ export function ChangeRequestsPanel({
           <DialogTrigger asChild>
             <Button size="sm" variant="outline" className="self-start"><Plus aria-hidden /> {" "}{tr("Demande hors périmètre")}</Button>
           </DialogTrigger>
-          <DialogContent className="max-w-xl">
+          <DialogContent size="xl">
             <DialogHeader>
               <DialogTitle>{tr("Demande hors périmètre")}</DialogTitle>
               <DialogDescription>{tr("Aucun montant n'est modifié sans accord enregistré : la demande reste « proposée » jusqu'à l'acceptation.")}</DialogDescription>

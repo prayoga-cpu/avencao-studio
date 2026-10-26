@@ -16,12 +16,15 @@ export function ProjectForm({
   clients,
   owners,
   templates,
+  activeVideos = 0,
 }: {
   projectId?: string;
   defaults: ProjectInput;
   clients: { value: string; label: string }[];
   owners: { value: string; label: string }[];
   templates: { value: string; label: string; count: number }[];
+  /** Vidéos encore en production : « Terminé » et « Archivé » sont refusés tant qu'il en reste. */
+  activeVideos?: number;
 }) {
   const tr = useT();
   const router = useRouter();
@@ -55,7 +58,12 @@ export function ProjectForm({
               {owners.map((o) => <option key={o.value} value={o.value}>{tr(o.label)}</option>)}
             </NativeSelect>
           </Field>
-          <Field label={tr("Statut")} htmlFor="status">
+          <Field
+            label={tr("Statut")}
+            htmlFor="status"
+            error={err("status")}
+            hint={activeVideos > 0 ? tr("{0} vidéo(s) encore en production : « Terminé » et « Archivé » seront refusés.", [activeVideos]) : undefined}
+          >
             <NativeSelect {...register("status")}>
               {Object.entries(PROJECT_STATUS).map(([v, s]) => <option key={v} value={v}>{tr(s.label)}</option>)}
             </NativeSelect>

@@ -10,6 +10,7 @@ import { addDays, toDateOnlyString } from "@/lib/dates";
 import { dec } from "@/lib/money";
 import { prisma } from "../db";
 import { NotFoundError } from "../errors";
+import { missionDueDate } from "../domain/schedule";
 import { ACTIVE_VIDEO_STATUSES, CLOSED_VIDEO_STATUSES, TO_VALIDATE_STATUSES, allowedTransitions } from "../domain/video-workflow";
 import { can, type Actor } from "../policies";
 import { agencyToday } from "../services/common";
@@ -79,7 +80,7 @@ export async function getProjectDetail(actor: Actor, id: string) {
     can(actor, "sales.read")
       ? prisma.salesOrder.findMany({
           where: { projectId: id },
-          include: { lines: { select: { netAmount: true, cancelledAmount: true } } },
+          include: { lines: { select: { netAmount: true, cancelledAmount: true, autoAllocate: true } } },
           orderBy: { acceptedOn: "desc" },
         })
       : null,
@@ -116,6 +117,7 @@ export async function getProjectDetail(actor: Actor, id: string) {
       acceptedOn: toDateOnlyString(o.acceptedOn),
       status: o.status,
       net: o.lines.reduce((acc, l) => acc.plus(dec(l.netAmount)).minus(dec(l.cancelledAmount)), dec(0)).toFixed(2),
+      autoAllocate: o.lines.some((l) => l.autoAllocate),
     })) ?? null,
     deadlineChanges,
   };
@@ -151,7 +153,8 @@ export async function listVideos(actor: Actor, f: VideoFilters) {
   if (f.status) and.push({ status: f.status as VideoStatus });
   switch (f.view) {
     case "a-attribuer":
-      and.push({ status: "TO_ASSIGN" });
+      // Toute vidéo non lancée sans prestataire (à préparer, en attente de rushs ou à attribuer).
+      and.push({ status: { in: ["TO_PREPARE", "WAITING_RUSHES", "TO_ASSIGN"] }, assignments: { none: { status: { not: "CANCELLED" } } } });
       break;
     case "a-valider":
       and.push({ status: { in: TO_VALIDATE_STATUSES } });
@@ -280,12 +283,13 @@ export async function getEditorMission(actor: Actor, videoId: string) {
     },
   });
   if (mine.length === 0) throw new NotFoundError();
-  const video = await prisma.video.findUniqueOrThrow({
+  // La deadline client sert seulement d'échéance de repli aux missions sans date : jamais renvoyée telle quelle.
+  const { clientDeadline, ...video } = await prisma.video.findUniqueOrThrow({
     where: { id: videoId },
     select: {
       id: true, reference: true, title: true, type: true, format: true, ratio: true, language: true, status: true, priority: true,
       rushDurationSec: true, expectedDurationSec: true, finalDurationSec: true, brief: true, objectives: true, audience: true,
-      references: true, subtitleStyle: true, brandConstraints: true, exportInstructions: true, internalDeadline: true,
+      references: true, subtitleStyle: true, brandConstraints: true, exportInstructions: true, internalDeadline: true, clientDeadline: true,
       isBlocked: true, blockedReason: true, includedRevisionRounds: true,
       project: { select: { title: true, client: { select: { displayName: true } } } },
       links: { where: { editorVisible: true }, select: { id: true, kind: true, url: true, label: true } },
@@ -304,6 +308,7 @@ export async function getEditorMission(actor: Actor, videoId: string) {
     video,
     assignments: mine.map((a) => ({
       ...a,
+      dueOn: missionDueDate(a.dueOn, { internalDeadline: video.internalDeadline, clientDeadline }),
       unitPrice: a.unitPrice?.toFixed(2) ?? null,
       quantity: a.quantity.toFixed(),
       estimatedHours: a.estimatedHours?.toFixed() ?? null,
@@ -316,14 +321,22 @@ export async function getEditorMission(actor: Actor, videoId: string) {
 export async function listEditorMissions(actor: Actor) {
   if (!actor.editorId) return { today: await agencyToday(), rows: [] };
   const today = await agencyToday();
-  const rows = await prisma.assignment.findMany({
+  const missions = await prisma.assignment.findMany({
     where: { editorId: actor.editorId, status: { not: "CANCELLED" }, video: { status: { notIn: ["ARCHIVED"] } } },
-    orderBy: [{ dueOn: { sort: "asc", nulls: "last" } }],
     select: {
       id: true, role: true, status: true, dueOn: true, estimatedHours: true,
-      video: { select: { id: true, reference: true, title: true, status: true, type: true, isBlocked: true, project: { select: { client: { select: { displayName: true } } } } } },
+      video: {
+        select: {
+          id: true, reference: true, title: true, status: true, type: true, isBlocked: true, internalDeadline: true, clientDeadline: true,
+          project: { select: { client: { select: { displayName: true } } } },
+        },
+      },
     },
   });
+  // Échéance effective (mission, sinon vidéo) ; les dates de la vidéo ne sont pas renvoyées.
+  const rows = missions
+    .map(({ video: { internalDeadline, clientDeadline, ...video }, ...m }) => ({ ...m, dueOn: missionDueDate(m.dueOn, { internalDeadline, clientDeadline }), video }))
+    .sort((a, b) => (a.dueOn?.getTime() ?? Number.MAX_SAFE_INTEGER) - (b.dueOn?.getTime() ?? Number.MAX_SAFE_INTEGER));
   return { today, rows };
 }
 

@@ -82,6 +82,31 @@ export default async function PlanningPage(props: PageProps<"/planning">) {
     </div>
   );
 
+  // Agenda mobile : jours du mois affiché (ou de la semaine) qui portent au moins une échéance.
+  const agendaDays = [...byDay.entries()].filter(([day]) => mode !== "mois" || day.slice(0, 7) === anchor.slice(0, 7));
+
+  const agenda = (days: [string, PlanningEvent[]][]) => (
+    <ol className="flex flex-col gap-4">
+      {days.map(([day, list]) => (
+        <li key={day}>
+          <h3 className={cn("mb-1.5 text-sm font-semibold", day === today && "text-brand", day < today && "text-subtle")}>{formatDateOnly(day)}{day === today ? tr(" · aujourd'hui") : ""}</h3>
+          <ul className="flex flex-col gap-1.5">
+            {list.map((e) => (
+              <li key={e.id} className={cn("flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border-l-2 px-3 py-2 text-sm", KIND[e.kind].cls)}>
+                <span className="w-16 shrink-0 text-xs text-subtle">{tr(KIND[e.kind].label)}</span>
+                {e.href ? <Link href={e.href} className="min-w-0 flex-1 font-medium hover:underline">{e.title}</Link> : <span className="min-w-0 flex-1 font-medium">{e.title}</span>}
+                <span className="w-full text-xs text-subtle sm:w-auto">{tr(e.subtitle)}</span>
+                {e.status ? <StatusBadge {...VIDEO_STATUS[e.status]} /> : null}
+                {e.overdue ? <StatusBadge label={tr("En retard")} tone="danger" /> : null}
+                {canMove && e.videoId && (e.kind === "client" || e.kind === "internal") ? <MoveDeadlineButton videoId={e.videoId} field={e.kind === "client" ? "VIDEO_CLIENT" : "VIDEO_INTERNAL"} current={e.date} label={e.title} /> : null}
+              </li>
+            ))}
+          </ul>
+        </li>
+      ))}
+    </ol>
+  );
+
   return (
     <>
       <PageHeader
@@ -116,46 +141,36 @@ export default async function PlanningPage(props: PageProps<"/planning">) {
       <TabLinks tabs={[{ value: "mois", label: tr("Mois") }, { value: "semaine", label: tr("Semaine") }, { value: "liste", label: tr("Liste") }]} active={mode} basePath="/planning" param="mode" extraParams={extra} />
 
       {mode === "liste" ? (
-        events.length === 0 ? <EmptyState title={tr("Aucune échéance sur ces 4 semaines")} /> : (
-          <ol className="flex flex-col gap-4">
-            {[...byDay.entries()].map(([day, list]) => (
-              <li key={day}>
-                <h3 className={cn("mb-1.5 text-sm font-semibold", day === today && "text-brand", day < today && "text-subtle")}>{formatDateOnly(day)}{day === today ? tr(" · aujourd'hui") : ""}</h3>
-                <ul className="flex flex-col gap-1.5">
-                  {list.map((e) => (
-                    <li key={e.id} className={cn("flex flex-wrap items-center gap-2 rounded-lg border-l-2 px-3 py-2 text-sm", KIND[e.kind].cls)}>
-                      <span className="w-16 shrink-0 text-xs text-subtle">{tr(KIND[e.kind].label)}</span>
-                      {e.href ? <Link href={e.href} className="min-w-0 flex-1 font-medium hover:underline">{e.title}</Link> : <span className="min-w-0 flex-1 font-medium">{e.title}</span>}
-                      <span className="text-xs text-subtle">{e.subtitle}</span>
-                      {e.status ? <StatusBadge {...VIDEO_STATUS[e.status]} /> : null}
-                      {e.overdue ? <StatusBadge label={tr("En retard")} tone="danger" /> : null}
-                      {canMove && e.videoId && (e.kind === "client" || e.kind === "internal") ? <MoveDeadlineButton videoId={e.videoId} field={e.kind === "client" ? "VIDEO_CLIENT" : "VIDEO_INTERNAL"} current={e.date} label={e.title} /> : null}
-                    </li>
-                  ))}
-                </ul>
-              </li>
-            ))}
-          </ol>
-        )
+        events.length === 0 ? <EmptyState title={tr("Aucune échéance sur ces 4 semaines")} /> : agenda([...byDay.entries()])
       ) : (
-        <div className="overflow-x-auto av-scroll">
-          <div className="grid min-w-[760px] grid-cols-7 gap-px overflow-hidden rounded-xl border border-border bg-border">
-            {DAYS.map((d) => <div key={d} className="bg-surface-2 px-2 py-1.5 text-center text-xs font-semibold text-subtle">{d}</div>)}
-            {Array.from({ length: Math.round((Date.parse(`${range.to}T00:00:00Z`) - Date.parse(`${range.from}T00:00:00Z`)) / 86_400_000) + 1 }, (_, i) => addDays(range.from, i)).map((day) => {
-              const list = byDay.get(day) ?? [];
-              const outside = mode === "mois" && day.slice(0, 7) !== anchor.slice(0, 7);
-              return (
-                <div key={day} className={cn("min-h-28 bg-surface p-1.5", outside && "bg-[#0d0d0d] opacity-60", mode === "semaine" && "min-h-80")}>
-                  <p className={cn("mb-1 text-right text-xs", day === today ? "font-bold text-brand" : "text-faint")}>{Number(day.slice(8))}</p>
-                  <div className="flex flex-col gap-1">
-                    {list.slice(0, mode === "mois" ? 4 : 30).map((e) => <EventChip key={e.id} e={e} />)}
-                    {mode === "mois" && list.length > 4 ? <Link href={href(day, "liste")} className="text-[0.7rem] text-brand hover:underline">+{list.length - 4} {" "}{tr("autres")}</Link> : null}
-                  </div>
-                </div>
-              );
-            })}
+        <>
+          {/* Mobile : agenda des jours qui ont une échéance (pas de grille à faire défiler). */}
+          <div className="md:hidden">
+            {agendaDays.length === 0 ? (
+              <EmptyState title={mode === "mois" ? tr("Aucune échéance ce mois-ci") : tr("Aucune échéance cette semaine")} />
+            ) : (
+              agenda(agendaDays)
+            )}
           </div>
-        </div>
+          <div className="hidden overflow-x-auto md:block av-scroll">
+            <div className="grid min-w-[760px] grid-cols-7 gap-px overflow-hidden rounded-xl border border-border bg-border">
+              {DAYS.map((d) => <div key={d} className="bg-surface-2 px-2 py-1.5 text-center text-xs font-semibold text-subtle">{tr(d)}</div>)}
+              {Array.from({ length: Math.round((Date.parse(`${range.to}T00:00:00Z`) - Date.parse(`${range.from}T00:00:00Z`)) / 86_400_000) + 1 }, (_, i) => addDays(range.from, i)).map((day) => {
+                const list = byDay.get(day) ?? [];
+                const outside = mode === "mois" && day.slice(0, 7) !== anchor.slice(0, 7);
+                return (
+                  <div key={day} className={cn("min-h-28 bg-surface p-1.5", outside && "bg-[#0d0d0d] opacity-60", mode === "semaine" && "min-h-80")}>
+                    <p className={cn("mb-1 text-right text-xs", day === today ? "font-bold text-brand" : "text-faint")}>{Number(day.slice(8))}</p>
+                    <div className="flex flex-col gap-1">
+                      {list.slice(0, mode === "mois" ? 4 : 30).map((e) => <EventChip key={e.id} e={e} />)}
+                      {mode === "mois" && list.length > 4 ? <Link href={href(day, "liste")} className="text-[0.7rem] text-brand hover:underline">+{list.length - 4} {" "}{tr("autres")}</Link> : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
       )}
       {staff && load.length ? (
         <Section title={tr("Heures réservées sur la période affichée")} description={tr("Missions actives avec échéance dans la période (heures estimées). Les heures réellement saisies sont visibles sur chaque vidéo.")} className="mt-5">

@@ -17,6 +17,8 @@ export const salesLineSchema = z.object({
   includedRevisions: zInt,
   allocationMethod: z.enum(["NONE", "EQUAL", "WEIGHTED", "MANUAL"]),
   allocations: z.array(z.object({ videoId: zRequired("Vidéo", 64), value: zDecimal })),
+  /** Forfait : parts égales sur toutes les vidéos actives du projet, y compris celles ajoutées plus tard. */
+  autoAllocate: z.boolean().optional(),
 });
 export type SalesLineInput = z.input<typeof salesLineSchema>;
 
@@ -37,8 +39,27 @@ export const reallocateSchema = z.object({
   lineId: zRequired("Ligne", 64),
   allocationMethod: z.enum(["NONE", "EQUAL", "WEIGHTED", "MANUAL"]),
   allocations: z.array(z.object({ videoId: zRequired("Vidéo", 64), value: zDecimal })),
+  autoAllocate: z.boolean().optional(),
 });
 export type ReallocateInput = z.input<typeof reallocateSchema>;
+
+/**
+ * Prix d'un projet entier, enregistré comme une vente acceptée (source unique des ventes) :
+ * - FLAT : forfait global réparti à parts égales, automatiquement, sur les vidéos actives ;
+ * - PER_VIDEO : prix unitaire × nombre de vidéos actives, réparti sur ces vidéos.
+ */
+export const projectPriceSchema = z.object({
+  projectId: zRequired("Projet", 64),
+  mode: z.enum(["FLAT", "PER_VIDEO"]),
+  amount: zMoneyRequired,
+  acceptedOn: zDateRequired,
+  currency: zCurrency,
+  manualFxRate: zRate,
+  title: zRequired("Intitulé", 200),
+  includedRevisions: zInt,
+  notes: zLongText(2000),
+});
+export type ProjectPriceInput = z.input<typeof projectPriceSchema>;
 
 export const cancelLineSchema = z.object({
   lineId: zRequired("Ligne", 64),

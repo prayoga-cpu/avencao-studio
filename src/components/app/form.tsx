@@ -86,7 +86,10 @@ export function FormActions({
   const tr = useT();
   const router = useRouter();
   return (
-    <div className="sticky bottom-0 z-10 -mx-1 mt-2 flex flex-wrap items-center justify-end gap-2 border-t border-border bg-background/95 px-1 py-3 backdrop-blur">
+    // Barre collée au bas de son conteneur qui défile (page ou fenêtre de dialogue) : fond opaque
+    // de la même couleur que ce conteneur (--form-actions-bg) ; dans un dialogue, décalée de sa marge
+    // intérieure (--dialog-pb) pour rester au ras du bord.
+    <div className="sticky bottom-[calc(var(--dialog-pb,0px)*-1)] z-10 -mx-1 mt-2 flex flex-wrap items-center justify-end gap-2 border-t border-border bg-[var(--form-actions-bg,var(--background))]/95 px-1 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur max-sm:[&>button]:min-h-10 max-sm:[&>button]:flex-1">
       {extra}
       {onCancel || cancelHref ? (
         <Button type="button" variant="outline" disabled={pending} onClick={() => (onCancel ? onCancel() : router.push(cancelHref!))}>

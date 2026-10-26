@@ -12,6 +12,7 @@ import { VideosTable } from "@/features/production/videos-table";
 import { PRIORITY, VIDEO_STATUS, VIDEO_TYPE_LABELS, enumOptions } from "@/lib/labels";
 import { requirePagePermission } from "@/server/auth/session";
 import { can } from "@/server/policies";
+import { getEditorChoices } from "@/server/queries/editors";
 import { clientOptions, editorOptions, projectOptions } from "@/server/queries/options";
 import { listVideos, type VideoView } from "@/server/queries/production";
 import { getT } from "@/lib/i18n/server";
@@ -36,7 +37,8 @@ export default async function VideosPage(props: PageProps<"/videos">) {
   const actor = await requirePagePermission("videos.readAll");
   const params = await props.searchParams;
   const view = (VIEWS.find((v) => v.value === params.vue)?.value ?? "tableau") as VideoView;
-  const [{ rows }, clients, projects, editors] = await Promise.all([
+  const canAssign = can(actor, "assignments.write");
+  const [{ rows }, clients, projects, editors, editorChoices] = await Promise.all([
     listVideos(actor, {
       view,
       q: sp(params.q),
@@ -52,6 +54,7 @@ export default async function VideosPage(props: PageProps<"/videos">) {
     clientOptions(),
     projectOptions(),
     editorOptions(),
+    canAssign ? getEditorChoices(actor) : Promise.resolve([]),
   ]);
   const keep: Record<string, string> = {};
   for (const k of ["q", "client", "projet", "monteur", "type", "statut", "priorite"]) {
@@ -83,7 +86,13 @@ export default async function VideosPage(props: PageProps<"/videos">) {
       ) : view === "kanban" ? (
         <VideosKanban rows={rows} showCancelled={sp(params.statut) === "CANCELLED"} />
       ) : (
-        <VideosTable rows={rows} showFinance={can(actor, "margins.project")} canBulk={can(actor, "videos.write")} />
+        <VideosTable
+          rows={rows}
+          showFinance={can(actor, "margins.project")}
+          canBulk={can(actor, "videos.write")}
+          canForce={actor.role === "ADMIN"}
+          assign={canAssign ? { editors: editorChoices, canSetPrice: can(actor, "costs.write") } : null}
+        />
       )}
       {rows.length >= 500 ? <p className="mt-2 text-xs text-warning">{tr("Affichage limité à 500 vidéos : affinez les filtres.")}</p> : null}
     </>

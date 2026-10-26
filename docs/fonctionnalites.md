@@ -1,6 +1,6 @@
 # Fonctionnalités : disponibles, partielles, différées
 
-État au 25/10/2026. « Disponible » = utilisable de bout en bout dans l'interface, contrôlé côté
+État au 26/10/2026. « Disponible » = utilisable de bout en bout dans l'interface, contrôlé côté
 serveur. Rien n'est simulé : une fonction absente est indiquée comme telle.
 
 ## Disponible
@@ -11,12 +11,12 @@ serveur. Rien n'est simulé : une fonction absente est indiquée comme telle.
 | Utilisateurs | Rôles (administrateur, responsable de production, monteur), accès financier optionnel, comptes importés « À revoir » avec rôle suggéré. |
 | Clients | Liste (recherche, filtres, pagination), fiche à onglets (aperçu, projets, vidéos, finances, notes, documents), contacts, étiquettes, activités, notes internes / réservées aux administrateurs, détection de doublons (email, TVA, SIRET, téléphone — jamais le nom), import CSV avec aperçu. |
 | Prospection | Pipeline glisser-déposer, prévision pondérée (affichée comme prévisionnelle), activités et relances, conversion en projet (sans facture ni encaissement). |
-| Projets | Modèles (vidéos + checklist), création, deadlines historisées, notes, documents, rentabilité du projet. |
-| Vidéos | Tableau (tri, sélection, actions groupées), kanban glisser-déposer, vues (à attribuer, à valider, en retard, bloquées, mes vidéos), création en lot, workflow complet, blocage, liens (visibles ou non du monteur), versions et revues, retours, checklist, temps passé, retouches hors périmètre (acceptation → vente + coût), historique. |
+| Projets | Modèles (vidéos + checklist), création, deadlines historisées, notes, documents, rentabilité du projet, prix du projet (forfait global réparti automatiquement ou prix par vidéo), vidéos sélectionnables (attribution et étape groupées). |
+| Vidéos | Tableau (tri, sélection, actions groupées limitées aux étapes autorisées, étape forcée par un administrateur, attribution groupée, sélection aussi sur mobile), kanban glisser-déposer, vues (à attribuer, à valider, en retard, bloquées, mes vidéos), création en lot, workflow complet, blocage, liens (visibles ou non du monteur), versions et revues, retours, checklist, temps passé, retouches hors périmètre (acceptation → vente + coût), historique. |
 | Monteurs | Profils, grilles tarifaires (EUR / IDR / USD ; vidéo, heure, jour, minute finale, enveloppe), indisponibilités, charge et capacité, appréciation privée. |
 | Affectations | Aperçu avant affectation : coût, marge avant/après, seuil, charge du monteur ; tarif figé ; validation et annulation des missions. |
 | Portail monteur | Mes missions (brief, liens autorisés, retours, dépôt de versions, checklist, temps), ma rémunération, mes règlements et justificatifs. Sans prix de vente ni marges. |
-| Planning | Mois, semaine, liste ; déplacement de deadline avec motif. |
+| Planning | Mois, semaine, liste (agenda sur mobile) ; déplacement de deadline avec motif ; missions sans date affichées à l'échéance de leur vidéo. |
 | Ventes | Ventes acceptées multi-lignes, allocation égale / pondérée / manuelle exacte au centime, réaffectation, annulation partielle ou totale tracée. |
 | Factures | Brouillon, émission (numéro, échéance, PDF joint), acompte puis facture finale avec déduction, annulation de brouillon, avoirs, ancienneté des créances. |
 | Encaissements | Saisie (devise, taux, frais, justificatif), affectations partielles, contre-passation, annulation tracée, remboursements, plafonds garantis en cas de saisie simultanée. |

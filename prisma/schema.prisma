@@ -1190,6 +1190,8 @@ model SalesOrderLine {
   cancelReason       String?
   includedRevisions  Int?
   allocationMethod   AllocationMethod    @default(EQUAL)
+  /// Forfait projet : parts égales sur les vidéos actives du projet, recalculées à chaque ajout/annulation.
+  autoAllocate       Boolean             @default(false)
   position           Int                 @default(0)
   createdAt          DateTime            @default(now())
 

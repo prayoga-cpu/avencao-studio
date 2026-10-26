@@ -3,6 +3,8 @@
 import type {
   AssignmentInput,
   AssignmentUpdateInput,
+  BulkAssignmentInput,
+  BulkVideoInput,
   BulkVideosInput,
   ChangeRequestInput,
   FeedbackInput,
@@ -14,11 +16,11 @@ import type {
   VersionInput,
   VideoInput,
 } from "./schemas";
-import type { Priority, VideoStatus } from "@/generated/prisma/enums";
+import { getLocale } from "@/lib/i18n/server";
+import { translateMessage } from "@/lib/i18n/translate";
 import { safeAction } from "@/server/actions";
 import { actorFor } from "@/server/auth/session";
-import { prisma } from "@/server/db";
-import { DomainError } from "@/server/errors";
+import type { BulkRefusal } from "@/server/bulk";
 import { assertCan } from "@/server/policies";
 import { revalidateApp } from "@/server/revalidate";
 import * as assignments from "@/server/services/assignments";
@@ -58,30 +60,36 @@ export async function transitionVideoAction(input: TransitionInput) {
   return safeAction(async () => done(await videos.transitionVideo(await actorFor(), input)), "Étape mise à jour.");
 }
 
+/** Refus d'une action groupée, traduits dans la langue de l'utilisateur. */
+async function localizeRefusals(refusals: BulkRefusal[]): Promise<BulkRefusal[]> {
+  const locale = await getLocale();
+  return refusals.map((r) => ({ ...r, message: translateMessage(locale, r.message) }));
+}
+
 /** Action groupée : chaque vidéo est contrôlée individuellement (droits + workflow). */
-export async function bulkVideoAction(input: { ids: string[]; to?: VideoStatus; priority?: Priority; reason?: string }) {
+export async function bulkVideoAction(input: BulkVideoInput) {
   return safeAction(async () => {
-    const actor = await actorFor("videos.write");
-    if (input.ids.length === 0 || input.ids.length > 200) throw new DomainError("Sélection invalide.");
-    let ok = 0;
-    const errors: string[] = [];
-    if (input.priority) {
-      const r = await prisma.video.updateMany({ where: { id: { in: input.ids } }, data: { priority: input.priority } });
-      ok = r.count;
-    }
-    if (input.to) {
-      for (const id of input.ids) {
-        try {
-          await videos.transitionVideo(actor, { videoId: id, to: input.to, reason: input.reason ?? "" });
-          ok += 1;
-        } catch (e) {
-          const v = await prisma.video.findUnique({ where: { id }, select: { reference: true } });
-          errors.push(`${v?.reference ?? id} : ${(e as Error).message}`);
-        }
-      }
-    }
+    const r = await videos.bulkUpdateVideos(await actorFor("videos.write"), input);
     revalidateApp();
-    return { ok, errors };
+    return { ...r, refusals: await localizeRefusals(r.refusals) };
+  });
+}
+
+/** Affectation groupée d'un prestataire (une mission par vidéo, tarif figé commun). */
+export async function assignEditorBulkAction(input: BulkAssignmentInput) {
+  return safeAction(async () => {
+    const r = await assignments.assignEditorBulk(await actorFor("assignments.write"), input);
+    revalidateApp();
+    const locale = await getLocale();
+    return { ...r, refusals: await localizeRefusals(r.refusals), warnings: r.warnings.map((w) => translateMessage(locale, w)) };
+  });
+}
+
+export async function previewBulkAssignmentAction(input: BulkAssignmentInput) {
+  return safeAction(async () => {
+    const r = await assignments.previewBulkAssignment(await actorFor("assignments.write"), input);
+    const locale = await getLocale();
+    return { ...r, skipped: await localizeRefusals(r.skipped), notes: r.notes.map((n) => translateMessage(locale, n)) };
   });
 }
 

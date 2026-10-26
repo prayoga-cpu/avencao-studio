@@ -5,11 +5,14 @@ import "server-only";
  * - L'allocation d'un pack entre vidéos est interne : sa somme vaut exactement le net
  *   de la ligne (centimes résiduels attribués de façon déterministe), en devise et en EUR.
  * - Une facture ne s'ajoute jamais aux ventes : elle référence éventuellement une ligne.
+ * - Forfait projet (ligne « répartie automatiquement ») : parts égales sur les vidéos actives
+ *   du projet, recalculées quand une vidéo est ajoutée, annulée ou réouverte.
  */
-import type { ReallocateInput, SalesLineInput, SalesOrderInput } from "@/features/finance/schemas";
-import { cancelLineSchema, reallocateSchema, salesOrderSchema } from "@/features/finance/schemas";
+import type { ProjectPriceInput, ReallocateInput, SalesLineInput, SalesOrderInput } from "@/features/finance/schemas";
+import { cancelLineSchema, projectPriceSchema, reallocateSchema, salesOrderSchema } from "@/features/finance/schemas";
 import type { Currency } from "@/generated/prisma/enums";
 import { parseDateOnly } from "@/lib/dates";
+import { VIDEO_TYPE_LABELS } from "@/lib/labels";
 import { Decimal, allocateByWeights, dec, lineNet, parseDecimalInput, sum, type CurrencyCode } from "@/lib/money";
 import { recordAudit } from "../audit";
 import { intOrNull, str } from "../convert";
@@ -77,6 +80,16 @@ async function assertVideosBelong(db: Db, videoIds: string[], clientId: string, 
   }
 }
 
+/** Vidéos qui portent le revenu d'un forfait projet : toutes sauf les annulées, dans l'ordre du projet. */
+async function activeProjectVideoIds(db: Db, projectId: string): Promise<string[]> {
+  const videos = await db.video.findMany({
+    where: { projectId, status: { not: "CANCELLED" } },
+    orderBy: [{ position: "asc" }, { reference: "asc" }],
+    select: { id: true },
+  });
+  return videos.map((v) => v.id);
+}
+
 async function createLine(
   tx: Db,
   orderId: string,
@@ -84,10 +97,16 @@ async function createLine(
   index: number,
   currency: Currency,
   fx: FxSnapshot,
+  projectId: string | null,
 ) {
   const net = lineNet(line.quantity.replace(",", "."), parseDecimalInput(line.unitPrice)!, parseDecimalInput(line.discount || "0") ?? 0, currency as CurrencyCode);
   if (net.isNegative()) throw new DomainError("La remise dépasse le montant de la ligne.");
   const netEur = convert(net, fx);
+  // Forfait réparti automatiquement : seulement en parts égales (une autre méthode reste manuelle).
+  const auto = !!line.autoAllocate && line.allocationMethod === "EQUAL";
+  if (auto && !projectId) throw new DomainError("La répartition automatique nécessite une vente rattachée à un projet.");
+  const method = auto ? "EQUAL" : line.allocationMethod;
+  const allocations = auto ? (await activeProjectVideoIds(tx, projectId!)).map((videoId) => ({ videoId, value: "" })) : line.allocations;
   const created = await tx.salesOrderLine.create({
     data: {
       salesOrderId: orderId,
@@ -100,11 +119,12 @@ async function createLine(
       netAmount: net.toFixed(2),
       netAmountEur: netEur.toFixed(2),
       includedRevisions: intOrNull(line.includedRevisions),
-      allocationMethod: line.allocationMethod === "NONE" ? "EQUAL" : line.allocationMethod,
+      allocationMethod: method === "NONE" ? "EQUAL" : method,
+      autoAllocate: auto,
       position: index,
     },
   });
-  const rows = computeAllocations(line.allocationMethod, line.allocations, net, netEur, currency as CurrencyCode);
+  const rows = computeAllocations(method, allocations, net, netEur, currency as CurrencyCode);
   if (rows.length) {
     await tx.revenueAllocation.createMany({
       data: rows.map((r) => ({
@@ -147,7 +167,7 @@ export async function createSalesOrder(actor: Actor, input: SalesOrderInput): Pr
         createdById: actor.id,
       },
     });
-    for (const [i, line] of d.lines.entries()) await createLine(tx, order.id, line, i, d.currency, fx);
+    for (const [i, line] of d.lines.entries()) await createLine(tx, order.id, line, i, d.currency, fx, projectId);
     if (client.status === "PROSPECT") await tx.client.update({ where: { id: d.clientId }, data: { status: "ACTIVE" } });
     await recordAudit(tx, { actorId: actor.id, action: "sales.create", entityType: "SalesOrder", entityId: order.id, after: { reference, lines: d.lines.length } });
     return { id: order.id, reference };
@@ -160,10 +180,15 @@ export async function reallocateLine(actor: Actor, input: ReallocateInput) {
   const d = reallocateSchema.parse(input);
   const line = await prisma.salesOrderLine.findUnique({ where: { id: d.lineId }, include: { salesOrder: true } });
   if (!line) throw new NotFoundError();
-  await assertVideosBelong(prisma, d.allocations.map((a) => a.videoId), line.salesOrder.clientId, line.salesOrder.projectId);
+  // Répartition automatique (forfait) : toutes les vidéos actives du projet, à parts égales.
+  const auto = !!d.autoAllocate;
+  if (auto && !line.salesOrder.projectId) throw new DomainError("La répartition automatique nécessite une vente rattachée à un projet.");
+  const method = auto ? "EQUAL" : d.allocationMethod;
+  const allocations = auto ? (await activeProjectVideoIds(prisma, line.salesOrder.projectId!)).map((videoId) => ({ videoId, value: "" })) : d.allocations;
+  await assertVideosBelong(prisma, allocations.map((a) => a.videoId), line.salesOrder.clientId, line.salesOrder.projectId);
   const remaining = dec(line.netAmount).minus(dec(line.cancelledAmount));
   const remainingEur = dec(line.netAmountEur).minus(dec(line.cancelledAmountEur));
-  const rows = computeAllocations(d.allocationMethod, d.allocations, remaining, remainingEur, line.salesOrder.currency as CurrencyCode);
+  const rows = computeAllocations(method, allocations, remaining, remainingEur, line.salesOrder.currency as CurrencyCode);
   await prisma.$transaction(async (tx) => {
     await lockRow(tx, "SalesOrderLine", line.id);
     const before = await tx.revenueAllocation.findMany({ where: { salesOrderLineId: line.id } });
@@ -173,10 +198,107 @@ export async function reallocateLine(actor: Actor, input: ReallocateInput) {
         data: rows.map((r) => ({ salesOrderLineId: line.id, videoId: r.videoId, weight: r.weight?.toFixed(4) ?? null, amount: r.amount.toFixed(2), amountEur: r.amountEur.toFixed(2) })),
       });
     }
-    await tx.salesOrderLine.update({ where: { id: line.id }, data: { allocationMethod: d.allocationMethod === "NONE" ? line.allocationMethod : d.allocationMethod } });
-    await recordAudit(tx, { actorId: actor.id, action: "sales.reallocate", entityType: "SalesOrderLine", entityId: line.id, before, after: rows });
+    // Un choix manuel désactive la répartition automatique ; elle se réactive explicitement.
+    await tx.salesOrderLine.update({ where: { id: line.id }, data: { allocationMethod: method === "NONE" ? line.allocationMethod : method, autoAllocate: auto } });
+    await recordAudit(tx, { actorId: actor.id, action: "sales.reallocate", entityType: "SalesOrderLine", entityId: line.id, before, after: { autoAllocate: auto, rows } });
   });
   return { id: line.id };
+}
+
+/**
+ * Forfait projet : les lignes « réparties automatiquement » suivent les vidéos actives du
+ * projet (ajout, annulation, réouverture). Parts égales du net restant, somme exacte au centime.
+ * À appeler dans la transaction qui modifie les vidéos. Renvoie le nombre de lignes recalculées.
+ */
+export async function syncProjectAutoAllocations(db: Db, actorId: string | null, projectId: string): Promise<number> {
+  const lines = await db.salesOrderLine.findMany({
+    where: { autoAllocate: true, salesOrder: { projectId, status: "ACCEPTED" } },
+    select: {
+      id: true, netAmount: true, netAmountEur: true, cancelledAmount: true, cancelledAmountEur: true,
+      salesOrder: { select: { currency: true } },
+      allocations: { select: { videoId: true, amount: true, amountEur: true } },
+    },
+  });
+  if (lines.length === 0) return 0;
+  const videoIds = await activeProjectVideoIds(db, projectId);
+  let changed = 0;
+  for (const line of lines) {
+    const remaining = dec(line.netAmount).minus(dec(line.cancelledAmount));
+    const remainingEur = dec(line.netAmountEur).minus(dec(line.cancelledAmountEur));
+    const rows = computeAllocations("EQUAL", videoIds.map((videoId) => ({ videoId, value: "" })), remaining, remainingEur, line.salesOrder.currency as CurrencyCode);
+    const unchanged =
+      rows.length === line.allocations.length &&
+      rows.every((r) => {
+        const cur = line.allocations.find((a) => a.videoId === r.videoId);
+        return !!cur && dec(cur.amount).eq(r.amount) && dec(cur.amountEur).eq(r.amountEur);
+      });
+    if (unchanged) continue;
+    await lockRow(db, "SalesOrderLine", line.id);
+    await db.revenueAllocation.deleteMany({ where: { salesOrderLineId: line.id } });
+    if (rows.length) {
+      await db.revenueAllocation.createMany({
+        data: rows.map((r) => ({ salesOrderLineId: line.id, videoId: r.videoId, weight: null, amount: r.amount.toFixed(2), amountEur: r.amountEur.toFixed(2) })),
+      });
+    }
+    await recordAudit(db, {
+      actorId,
+      action: "sales.auto_reallocate",
+      entityType: "SalesOrderLine",
+      entityId: line.id,
+      before: line.allocations,
+      after: rows.map((r) => ({ videoId: r.videoId, amount: r.amount.toFixed(2), amountEur: r.amountEur.toFixed(2) })),
+    });
+    changed += 1;
+  }
+  return changed;
+}
+
+/**
+ * Prix d'un projet entier (bouton « Prix du projet ») : une vente acceptée d'une ligne.
+ * - Forfait global : réparti à parts égales sur les vidéos actives, y compris celles ajoutées
+ *   plus tard (répartition automatique) ;
+ * - Prix par vidéo : quantité = vidéos actives, réparti sur ces vidéos (une vidéo ajoutée
+ *   ensuite est une nouvelle vente : le prix accepté reste figé).
+ */
+export async function setProjectPrice(actor: Actor, input: ProjectPriceInput): Promise<{ id: string; reference: string }> {
+  assertCan(actor, "sales.write");
+  const d = projectPriceSchema.parse(input);
+  const project = await prisma.project.findUnique({
+    where: { id: d.projectId },
+    select: {
+      id: true, title: true, clientId: true, includedRevisionRounds: true,
+      videos: { where: { status: { not: "CANCELLED" } }, orderBy: [{ position: "asc" }, { reference: "asc" }], select: { id: true, type: true } },
+    },
+  });
+  if (!project) throw new NotFoundError("Projet introuvable.");
+  const count = project.videos.length;
+  if (d.mode === "PER_VIDEO" && count === 0) throw new DomainError("Ajoutez d'abord les vidéos du projet pour fixer un prix par vidéo.");
+  const types = [...new Set(project.videos.map((v) => v.type))];
+  const videoType = types.length === 1 ? types[0] : "";
+  const includedRevisions = d.includedRevisions || (project.includedRevisionRounds?.toString() ?? "");
+  const line: SalesLineInput =
+    d.mode === "FLAT"
+      ? {
+          description: `Forfait projet — ${project.title}`,
+          videoType, catalogItemId: "", quantity: "1", unitPrice: d.amount, discount: "", includedRevisions,
+          allocationMethod: "EQUAL", allocations: [], autoAllocate: true,
+        }
+      : {
+          description: `${count} × ${videoType ? VIDEO_TYPE_LABELS[videoType] : "vidéo"} — ${project.title}`,
+          videoType, catalogItemId: "", quantity: String(count), unitPrice: d.amount, discount: "", includedRevisions,
+          allocationMethod: "EQUAL", allocations: project.videos.map((v) => ({ videoId: v.id, value: "" })), autoAllocate: false,
+        };
+  return createSalesOrder(actor, {
+    clientId: project.clientId,
+    projectId: project.id,
+    opportunityId: "",
+    title: d.title,
+    acceptedOn: d.acceptedOn,
+    currency: d.currency,
+    manualFxRate: d.manualFxRate,
+    notes: d.notes,
+    lines: [line],
+  });
 }
 
 /**

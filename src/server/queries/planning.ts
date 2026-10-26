@@ -4,6 +4,7 @@ import type { Priority, VideoStatus } from "@/generated/prisma/enums";
 import { toDateOnlyString } from "@/lib/dates";
 import { dec, sum } from "@/lib/money";
 import { prisma } from "../db";
+import { ACTIVE_ASSIGNMENT_STATUSES, missionDueDate } from "../domain/schedule";
 import { CLOSED_VIDEO_STATUSES } from "../domain/video-workflow";
 import { can, type Actor } from "../policies";
 
@@ -40,12 +41,22 @@ export async function getPlanning(actor: Actor, range: { from: string; to: strin
     }),
     prisma.assignment.findMany({
       where: {
-        status: { in: ["PLANNED", "IN_PROGRESS", "SUBMITTED"] },
-        dueOn: { gte: from, lte: to },
+        status: { in: ACTIVE_ASSIGNMENT_STATUSES },
+        // Échéance de la mission, sinon celle de sa vidéo (interne, puis client) : une mission
+        // planifiée par l'agence apparaît toujours au planning du monteur.
+        OR: [
+          { dueOn: { gte: from, lte: to } },
+          { dueOn: null, video: { internalDeadline: { gte: from, lte: to } } },
+          { dueOn: null, video: { internalDeadline: null, clientDeadline: { gte: from, lte: to } } },
+        ],
         ...(editorScope ? { editorId: editorScope } : {}),
         ...(f.client ? { video: { project: { clientId: f.client } } } : {}),
       },
-      select: { id: true, dueOn: true, estimatedHours: true, role: true, editor: { select: { id: true, displayName: true } }, video: { select: { id: true, reference: true, title: true, status: true } } },
+      select: {
+        id: true, dueOn: true, estimatedHours: true, role: true,
+        editor: { select: { id: true, displayName: true } },
+        video: { select: { id: true, reference: true, title: true, status: true, internalDeadline: true, clientDeadline: true } },
+      },
     }),
     prisma.editorUnavailability.findMany({
       where: { startsOn: { lte: to }, endsOn: { gte: from }, ...(editorScope ? { editorId: editorScope } : {}) },
@@ -66,8 +77,10 @@ export async function getPlanning(actor: Actor, range: { from: string; to: strin
     }
   }
   for (const a of assignments) {
-    const d = toDateOnlyString(a.dueOn!);
-    events.push({ id: `a-${a.id}`, date: d, kind: "mission", title: `${a.video.reference} ${a.video.title}`, subtitle: `Mission ${a.editor.displayName}${a.estimatedHours ? ` · ${a.estimatedHours.toFixed()} h` : " · heures non estimées"}`, href: staff ? `/videos/${a.video.id}` : `/missions/${a.video.id}`, status: a.video.status, overdue: d < today, videoId: a.video.id });
+    const d = toDateOnlyString(missionDueDate(a.dueOn, a.video)!);
+    const hours = a.estimatedHours ? ` · ${a.estimatedHours.toFixed()} h` : " · heures non estimées";
+    const derived = a.dueOn ? "" : " · échéance de la vidéo";
+    events.push({ id: `a-${a.id}`, date: d, kind: "mission", title: `${a.video.reference} ${a.video.title}`, subtitle: `Mission ${a.editor.displayName}${hours}${derived}`, href: staff ? `/videos/${a.video.id}` : `/missions/${a.video.id}`, status: a.video.status, overdue: d < today, videoId: a.video.id });
   }
   for (const u of unavailable) {
     const start = toDateOnlyString(u.startsOn) < range.from ? range.from : toDateOnlyString(u.startsOn);
