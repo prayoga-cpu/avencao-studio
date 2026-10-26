@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 import { Field } from "@/components/app/field";
 import { Notice } from "@/components/app/notice";
+import { PasswordInput } from "@/components/app/password-input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -37,7 +38,8 @@ export function LoginForm() {
             );
             return;
           }
-          router.replace("/");
+          // Accueil direct (un monteur est redirigé vers ses missions par la page elle-même).
+          router.replace("/dashboard");
           router.refresh();
         });
       }}
@@ -47,7 +49,7 @@ export function LoginForm() {
         <Input name="email" type="email" autoComplete="email" autoFocus required />
       </Field>
       <Field label="Mot de passe" htmlFor="password" required>
-        <Input name="password" type="password" autoComplete="current-password" required minLength={10} />
+        <PasswordInput name="password" autoComplete="current-password" required minLength={10} />
       </Field>
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">

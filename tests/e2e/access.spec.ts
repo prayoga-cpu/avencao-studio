@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { statePath } from "./global-setup";
+import { ROLES, statePath } from "./global-setup";
 
 test.describe("sans session", () => {
   test("les pages redirigent vers la connexion", async ({ page }) => {
@@ -15,6 +15,19 @@ test.describe("sans session", () => {
     await page.click("button[type=submit]");
     await expect(page.getByText(/Identifiants incorrects|Trop de tentatives/)).toBeVisible();
     await expect(page).toHaveURL(/\/connexion/);
+  });
+
+  test("connexion par le formulaire : mot de passe visible à la demande, arrivée sur le tableau de bord", async ({ page }) => {
+    await page.goto("/connexion");
+    await page.getByLabel("Email").fill(ROLES.admin);
+    const password = page.getByLabel(/^Mot de passe/);
+    await password.fill(process.env.E2E_PASSWORD || process.env.SEED_ADMIN_PASSWORD || "");
+    await expect(password).toHaveAttribute("type", "password");
+    await page.getByRole("button", { name: "Afficher le mot de passe" }).click();
+    await expect(password).toHaveAttribute("type", "text");
+    await page.getByRole("button", { name: "Se connecter" }).click();
+    await expect(page).toHaveURL(/\/dashboard/);
+    await expect(page.getByRole("heading", { name: "Tableau de bord" })).toBeVisible();
   });
 
   test("les API de fichiers et d'export refusent sans session", async ({ request }) => {

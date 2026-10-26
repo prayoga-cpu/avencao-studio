@@ -6,7 +6,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Field } from "@/components/app/field";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/app/password-input";
 import { setPasswordAction } from "./actions";
 
 export function SetPasswordForm({ token }: { token: string }) {
@@ -36,10 +36,10 @@ export function SetPasswordForm({ token }: { token: string }) {
       }}
     >
       <Field label="Mot de passe" htmlFor="password" required hint="10 caractères minimum." error={errors.password?.[0]}>
-        <Input name="password" type="password" autoComplete="new-password" required minLength={10} />
+        <PasswordInput name="password" autoComplete="new-password" required minLength={10} />
       </Field>
       <Field label="Confirmation" htmlFor="confirm" required error={errors.confirm?.[0]}>
-        <Input name="confirm" type="password" autoComplete="new-password" required minLength={10} />
+        <PasswordInput name="confirm" autoComplete="new-password" required minLength={10} />
       </Field>
       <Button type="submit" size="lg" disabled={pending}>
         {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}

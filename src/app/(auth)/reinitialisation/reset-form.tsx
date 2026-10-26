@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Field } from "@/components/app/field";
 import { Notice } from "@/components/app/notice";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/app/password-input";
 import { authClient } from "@/lib/auth-client";
 
 /** Lien reçu par email (flux Better Auth) : jeton à durée limitée. */
@@ -52,10 +52,10 @@ export function ResetForm() {
     >
       {error ? <Notice tone="danger">{error}</Notice> : null}
       <Field label="Nouveau mot de passe" htmlFor="password" required hint="10 caractères minimum.">
-        <Input name="password" type="password" autoComplete="new-password" minLength={10} required />
+        <PasswordInput name="password" autoComplete="new-password" minLength={10} required />
       </Field>
       <Field label="Confirmation" htmlFor="confirm" required>
-        <Input name="confirm" type="password" autoComplete="new-password" minLength={10} required />
+        <PasswordInput name="confirm" autoComplete="new-password" minLength={10} required />
       </Field>
       <Button type="submit" size="lg" disabled={pending}>
         {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}
