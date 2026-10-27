@@ -99,6 +99,7 @@ export function BulkBar({
     <div
       role="region"
       aria-label={tr("Actions groupées")}
+      data-bulk-bar=""
       className={cn(
         "z-40 flex flex-col gap-2 border-brand bg-[#1a0610f2] p-3 text-sm backdrop-blur",
         // Mobile : barre fixée en bas (zone sûre iOS) ; tablette et bureau : bandeau au-dessus de la liste.

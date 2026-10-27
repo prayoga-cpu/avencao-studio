@@ -61,6 +61,7 @@ function readRecent(): string[] {
  * « Demander à Claude » (toutes les pages) : ouvert, réduit ou fermé. La question part dans le
  * compte Claude de l'utilisateur (nouvel onglet claude.ai, ou copiée pour Claude Desktop / Code),
  * qui lit le CRM via le serveur MCP. Aucune API d'IA côté CRM.
+ * Sur téléphone, il s'efface tant que la barre d'actions groupées (vidéos sélectionnées) est affichée.
  */
 export function AssistantPanel({ connected, finance }: { connected: boolean; finance: boolean }) {
   const tr = useT();
@@ -130,7 +131,7 @@ export function AssistantPanel({ connected, finance }: { connected: boolean; fin
       <button
         type="button"
         onClick={() => change("open")}
-        className="fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full border border-brand-border bg-[#111111f2] px-4 py-3 text-sm font-semibold shadow-[0_0_30px_rgba(255,0,102,0.25)] backdrop-blur hover:border-brand hover:text-brand"
+        className="max-md:[body:has([data-bulk-bar])_&]:hidden fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full border border-brand-border bg-[#111111f2] px-4 py-3 text-sm font-semibold shadow-[0_0_30px_rgba(255,0,102,0.25)] backdrop-blur hover:border-brand hover:text-brand"
         aria-label={tr("Demander à Claude")}
       >
         <Sparkles className="size-4 text-brand" aria-hidden />
@@ -141,7 +142,7 @@ export function AssistantPanel({ connected, finance }: { connected: boolean; fin
 
   if (state === "minimized") {
     return (
-      <div className="fixed bottom-4 right-4 z-40 flex items-center gap-1 rounded-full border border-brand-border bg-[#111111f2] py-1.5 pl-4 pr-1.5 text-sm shadow-[0_0_30px_rgba(255,0,102,0.2)] backdrop-blur" role="region" aria-label={tr("Demander à Claude")}>
+      <div className="max-md:[body:has([data-bulk-bar])_&]:hidden fixed bottom-4 right-4 z-40 flex items-center gap-1 rounded-full border border-brand-border bg-[#111111f2] py-1.5 pl-4 pr-1.5 text-sm shadow-[0_0_30px_rgba(255,0,102,0.2)] backdrop-blur" role="region" aria-label={tr("Demander à Claude")}>
         <button type="button" onClick={() => change("open")} className="flex items-center gap-2 font-semibold hover:text-brand">
           <Sparkles className="size-4 text-brand" aria-hidden />
           {tr("Claude")}
@@ -164,7 +165,7 @@ export function AssistantPanel({ connected, finance }: { connected: boolean; fin
       onKeyDown={(e) => {
         if (e.key === "Escape") change("minimized");
       }}
-      className="fixed inset-x-0 bottom-0 z-40 flex max-h-[92dvh] flex-col overflow-hidden rounded-t-2xl border border-brand-border bg-[#0d0d0df7] shadow-[0_0_50px_rgba(255,0,102,0.18)] backdrop-blur sm:inset-x-auto sm:bottom-4 sm:right-4 sm:w-[400px] sm:rounded-2xl"
+      className="max-md:[body:has([data-bulk-bar])_&]:hidden fixed inset-x-0 bottom-0 z-40 flex max-h-[92dvh] flex-col overflow-hidden rounded-t-2xl border border-brand-border bg-[#0d0d0df7] shadow-[0_0_50px_rgba(255,0,102,0.18)] backdrop-blur sm:inset-x-auto sm:bottom-4 sm:right-4 sm:w-[400px] sm:rounded-2xl"
     >
       <header className="av-panel-header flex items-center gap-2 px-3 py-2.5">
         <Sparkles className="size-4 text-brand" aria-hidden />
