@@ -61,6 +61,8 @@ export default async function CostPage(props: PageProps<"/finances/couts/[id]">)
               { label: tr("Période"), value: c.periodStart ? `${formatDateOnly(c.periodStart)} → ${formatDateOnly(c.periodEnd)}` : "—" },
               { label: tr("Rattachement"), value: c.video ? <Link className="text-brand hover:underline" href={`/videos/${c.video.id}`}>{c.video.reference} — {c.video.title}</Link> : c.project ? <Link className="text-brand hover:underline" href={`/projets/${c.project.id}`}>{c.project.reference} — {c.project.title}</Link> : "—" },
               { label: tr("Annulation"), value: c.cancelReason ?? "—" },
+              { label: tr("N° de pièce fournisseur"), value: c.documentRef ?? "—" },
+              { label: tr("Pièce jointe"), value: c.attachmentId ? <a className="text-brand hover:underline" href={`/api/files/${c.attachmentId}`}>{tr("Ouvrir")}</a> : "—" },
               { label: tr("Notes"), value: c.notes ?? "—" },
             ]}
           />

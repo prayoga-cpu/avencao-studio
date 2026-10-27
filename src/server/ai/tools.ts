@@ -1,53 +1,47 @@
 import "server-only";
 /**
- * Outils CRM en lecture seule exposés par le serveur MCP (claude.ai, Claude Desktop,
- * Claude Code), utilisés avec le compte Claude de chaque utilisateur.
+ * Outils CRM exposés par le serveur MCP (claude.ai, Claude Desktop, Claude Code), utilisés
+ * avec le compte Claude de chaque utilisateur.
  *
  * Règles :
  * - chaque outil déclare la permission requise : la liste proposée à Claude est filtrée
  *   selon le rôle de l'utilisateur, et la permission est revérifiée à l'exécution ;
  * - les lectures réutilisent les requêtes des écrans (mêmes filtres financiers) et ne
  *   renvoient que des champs explicitement choisis ;
- * - aucun outil ne modifie de donnée.
+ * - les écritures (write-tools-*.ts) ne sont proposées qu'avec la portée crm:write accordée
+ *   par l'utilisateur ; elles passent par les services du CRM (mêmes contrôles que les écrans),
+ *   sont journalisées « via Claude » et ne suppriment, n'annulent, n'émettent ni ne valident rien.
  */
 import { z } from "zod";
-import { diffInDays, isIsoDate, previousPeriod, resolvePeriod, toDateOnlyString, type PeriodPreset } from "@/lib/dates";
+import { diffInDays, isIsoDate, previousPeriod, resolvePeriod, type PeriodPreset } from "@/lib/dates";
+import { toActionError } from "../actions";
 import { publicAppUrl } from "../app-url";
+import { recordAudit, withAuditSource } from "../audit";
 import { prisma } from "../db";
-import { DomainError, ForbiddenError, NotFoundError } from "../errors";
-import { can, type Actor, type Permission } from "../policies";
+import { ConflictError, DomainError, ForbiddenError, NotFoundError } from "../errors";
+import { can, type Actor } from "../policies";
 import { getClient, getClientFinance, getClientOverview, getNotes, listClients } from "../queries/clients";
 import { getEditorCapacity, getOperationalSnapshot } from "../queries/dashboard";
 import { listEditors } from "../queries/editors";
-import { listInvoices } from "../queries/finance";
+import { getInvoice, listDirectCosts, listExpenses, listInvoices } from "../queries/finance";
 import { getPlanning } from "../queries/planning";
 import { getProjectDetail, getVideoDetail, listProjects, listVideos, type VideoView } from "../queries/production";
+import { revalidateAppQuietly } from "../revalidate";
 import { toJsonSafe } from "../serialize";
 import { getSettings } from "../settings";
 import { agencyToday } from "../services/common";
 import { getPeriodMetrics, getReceivables, getSupplierDebt } from "../services/metrics";
 import { REPORTS, buildReport } from "../services/reports";
+import { recordPath } from "./record-links";
+import { DATE_HINT, ToolError, clip, d, id, isWriteResult, isoDate, link, optionalText, tool, type CrmTool } from "./tool-kit";
+import { CRM_WRITE_TOOLS } from "./write-tools-crm";
+import { FINANCE_WRITE_TOOLS } from "./write-tools-finance";
 
-export interface CrmTool {
-  name: string;
-  /** Libellé affiché dans l'interface pendant l'exécution (texte français, traduit à l'affichage). */
-  label: string;
-  /** Description destinée au modèle (anglais, non traduite). */
-  about: string;
-  /** L'outil est proposé si l'utilisateur a au moins une de ces permissions. */
-  anyOf: Permission[];
-  input: z.ZodObject;
-  run: (actor: Actor, input: never) => Promise<unknown>;
-}
+export type { CrmTool } from "./tool-kit";
 
 /** Résultat d'outil sérialisé au-delà duquel on tronque (protège le contexte du modèle). */
 export const MAX_TOOL_RESULT_CHARS = 40_000;
 
-const id = (what: string) => z.string().min(1).max(64).describe(`${what} id (from a search result)`);
-const optionalText = (description: string) => z.string().trim().max(200).optional().describe(description);
-const isoDate = (description: string) =>
-  z.string().refine(isIsoDate, DATE_HINT).optional().describe(description);
-const DATE_HINT = ["Expected", "YYYY-MM-DD"].join(" ");
 const RANGE_HINT = ["Range too long:", "62 days maximum."].join(" ");
 const PERIODS = ["month", "last-month", "quarter", "year", "last-year", "custom"] as const;
 const periodInput = {
@@ -62,29 +56,13 @@ function omit<T extends object, K extends keyof T>(value: T, key: K): Omit<T, K>
   return copy;
 }
 
-const link = (path: string) => `${publicAppUrl()}${path}`;
-const d = (value: Date | null | undefined) => (value ? toDateOnlyString(value) : null);
-const clip = (value: string | null | undefined, max = 600) =>
-  value ? (value.length > max ? `${value.slice(0, max)}…` : value) : null;
-
 async function periodFrom(input: { period?: PeriodPreset; from?: string; to?: string }) {
   const today = await agencyToday();
   const period = resolvePeriod(input.period ?? "month", today, { from: input.from, to: input.to });
   return { today, period };
 }
 
-function tool<S extends z.ZodObject>(def: {
-  name: string;
-  label: string;
-  about: string;
-  anyOf: Permission[];
-  input: S;
-  run: (actor: Actor, input: z.infer<S>) => Promise<unknown>;
-}): CrmTool {
-  return def as unknown as CrmTool;
-}
-
-const TOOLS: CrmTool[] = [
+const READ_TOOLS: CrmTool[] = [
   tool({
     name: "get_context",
     label: "Contexte",
@@ -518,40 +496,222 @@ const TOOLS: CrmTool[] = [
       };
     },
   }),
+
+  tool({
+    name: "get_reference_data",
+    label: "Données de référence",
+    about:
+      "Ids and values needed before creating records: expense categories, service catalog (prices only with sales access), project templates, staff users (owners), latest exchange rates (units per 1 EUR) and agency defaults. Call it before record_expense, create_project with a template, or when an owner, category or rate is needed.",
+    anyOf: ["assistant.use"],
+    input: z.object({}),
+    run: async (actor) => {
+      const [settings, categories, catalog, templates, staff, rates] = await Promise.all([
+        getSettings(),
+        can(actor, "expenses.read") ? prisma.expenseCategory.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }) : null,
+        prisma.serviceCatalogItem.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, videoType: true, unit: true, unitPrice: true, currency: true, includedRevisions: true } }),
+        prisma.projectTemplate.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, videoType: true, defaultVideoCount: true } }),
+        prisma.user.findMany({ where: { status: "ACTIVE", role: { in: ["ADMIN", "PRODUCTION_MANAGER"] } }, orderBy: { name: "asc" }, select: { id: true, name: true, role: true } }),
+        prisma.exchangeRate.findMany({ orderBy: { date: "desc" }, take: 20, select: { currency: true, date: true, unitsPerEur: true } }),
+      ]);
+      const latestRates = new Map<string, { currency: string; date: string | null; unitsPerEur: string }>();
+      for (const r of rates) if (!latestRates.has(r.currency)) latestRates.set(r.currency, { currency: r.currency, date: d(r.date), unitsPerEur: r.unitsPerEur.toString() });
+      const prices = can(actor, "sales.read");
+      return {
+        currencies: ["EUR", "IDR", "USD"],
+        latestExchangeRates: [...latestRates.values()],
+        expenseCategories: categories ?? "not available for your role",
+        catalog: catalog.map((c) => ({ id: c.id, name: c.name, videoType: c.videoType, unit: c.unit, includedRevisions: c.includedRevisions, ...(prices ? { unitPrice: c.unitPrice, currency: c.currency } : {}) })),
+        projectTemplates: templates,
+        staff,
+        defaults: {
+          paymentTermsDays: settings.defaultPaymentTermsDays,
+          includedRevisionRounds: settings.defaultIncludedRevisions,
+          nonRecoverableVatAddedToCost: settings.nonRecoverableVatInCost,
+          timezone: settings.timezone,
+          reportingCurrency: settings.reportingCurrency,
+          maxUploadMb: settings.maxUploadMb,
+        },
+      };
+    },
+  }),
+
+  tool({
+    name: "get_invoice",
+    label: "Fiche facture",
+    about: "One client invoice: number, status, dates, lines, totals, balance and payment state, payments allocated, credit notes and whether the PDF is attached. Use search_invoices to find the id.",
+    anyOf: ["invoices.read"],
+    input: z.object({ invoice_id: id("Invoice") }),
+    run: async (actor, input) => {
+      const { invoice: i, balance, pdf } = await getInvoice(actor, input.invoice_id);
+      return {
+        id: i.id,
+        url: link(`/finances/factures/${i.id}`),
+        number: i.number,
+        externalRef: i.externalRef,
+        status: i.status,
+        kind: i.kind,
+        client: i.client.displayName,
+        clientId: i.client.id,
+        project: i.project ? { id: i.project.id, reference: i.project.reference, title: i.project.title } : null,
+        salesOrder: i.salesOrder ? { id: i.salesOrder.id, reference: i.salesOrder.reference } : null,
+        issueDate: d(i.issueDate),
+        dueDate: d(i.dueDate),
+        currency: i.currency,
+        totals: { net: i.totalNet, vat: i.totalVat, gross: i.totalGross, netEur: i.totalNetEur },
+        paymentState: balance.state,
+        balance: balance.balance.toFixed(2),
+        overdue: balance.overdue,
+        daysOverdue: balance.daysOverdue,
+        lines: i.lines.map((l) => ({ description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, vatRate: l.vatRate, net: l.netAmount, gross: l.grossAmount, deductsDeposit: l.deductsInvoice?.number ?? null })),
+        payments: i.allocations.map((a) => ({ receivedOn: d(a.payment.receivedOn), amount: a.amount, method: a.payment.method, reference: a.payment.reference, reversed: !!a.reversedAt || a.payment.status !== "RECORDED" })),
+        creditNotes: i.creditNotes.map((c) => ({ number: c.number, issueDate: d(c.issueDate), gross: c.totalGross, reason: clip(c.reason, 200) })),
+        pdfAttached: !!pdf,
+        notes: clip(i.notes, 500),
+      };
+    },
+  }),
+
+  tool({
+    name: "search_costs",
+    label: "Coûts",
+    about:
+      "Direct costs: editor missions (ASSIGNMENT), purchases, additional costs and monthly envelopes, with stage (ESTIMATED, COMMITTED, VALIDATED, CANCELLED), amount, paid and remaining amounts and the supplier document number. missing_amount=true lists costs still « to fill in ». Use it to match an editor or supplier invoice before recording anything.",
+    anyOf: ["costs.read"],
+    input: z.object({
+      editor_id: z.string().max(64).optional().describe("Only this editor's costs"),
+      stage: z.enum(["ESTIMATED", "COMMITTED", "VALIDATED", "CANCELLED"]).optional(),
+      kind: z.enum(["ASSIGNMENT", "PURCHASE", "ADDITIONAL", "ENVELOPE"]).optional(),
+      missing_amount: z.boolean().optional().describe("Only costs without an amount yet"),
+      query: optionalText("Text in the label, supplier or document number"),
+      limit: z.number().int().min(1).max(200).optional().describe("Maximum rows (default 50)"),
+    }),
+    run: async (actor, input) => {
+      const rows = await listDirectCosts(actor, { stage: input.stage, kind: input.kind, editor: input.editor_id, missing: input.missing_amount });
+      const q = input.query?.toLowerCase();
+      const matched = q ? rows.filter((r) => [r.label, r.supplierName, r.documentRef, r.editor?.displayName].some((x) => x?.toLowerCase().includes(q))) : rows;
+      const limit = input.limit ?? 50;
+      return {
+        total: matched.length,
+        rows: matched.slice(0, limit).map((r) => ({
+          id: r.id, url: link(`/finances/couts/${r.id}`), kind: r.kind, stage: r.stage, label: r.label,
+          editor: r.editor?.displayName ?? null, editorId: r.editor?.id ?? null, supplierName: r.supplierName,
+          video: r.video?.reference ?? null, project: r.project?.reference ?? null, incurredOn: r.incurredOn,
+          amount: r.amount, currency: r.currency, amountEur: r.amountEur, paid: r.paid, remaining: r.remaining,
+          documentRef: r.documentRef, documentAttached: !!r.attachmentId,
+        })),
+      };
+    },
+  }),
+
+  tool({
+    name: "search_expenses",
+    label: "Charges",
+    about: "Overhead expenses (subscriptions, software, storage, ads, bank fees…) with category, supplier, net amount, VAT, payment state and supplier document number. Use it to check whether a receipt is already recorded.",
+    anyOf: ["expenses.read"],
+    input: z.object({
+      query: optionalText("Text in the label, supplier or document number"),
+      category_id: z.string().max(64).optional(),
+      unpaid: z.boolean().optional().describe("Only unpaid expenses"),
+      from: isoDate("Attached period from (YYYY-MM-DD), with to"),
+      to: isoDate("Attached period to (YYYY-MM-DD), with from"),
+      limit: z.number().int().min(1).max(200).optional().describe("Maximum rows (default 50)"),
+    }),
+    run: async (actor, input) => {
+      const rows = await listExpenses(actor, { from: input.from, to: input.to, category: input.category_id, unpaid: input.unpaid });
+      const q = input.query?.toLowerCase();
+      const matched = q ? rows.filter((r) => [r.label, r.supplier, r.documentRef].some((x) => x?.toLowerCase().includes(q))) : rows;
+      const limit = input.limit ?? 50;
+      return {
+        total: matched.length,
+        url: link(recordPath("EXPENSE", "")),
+        rows: matched.slice(0, limit).map((r) => ({
+          id: r.id, label: r.label, supplier: r.supplier, category: r.category, expenseDate: r.expenseDate, periodMonth: r.periodMonth,
+          amountNet: r.amountNet, vatAmount: r.vatAmount, currency: r.currency, costEur: r.costEur, recurrence: r.recurrence,
+          isPaid: r.isPaid, paidOn: r.paidOn, status: r.status, documentRef: r.documentRef, documentAttached: !!r.attachmentId,
+        })),
+      };
+    },
+  }),
 ];
 
-/** Outils proposés à un utilisateur (ordre stable : favorise le cache de prompt). */
-export function toolsFor(actor: Actor): CrmTool[] {
+/** Lectures d'abord, puis écritures (ordre stable : favorise le cache de prompt). */
+const TOOLS: CrmTool[] = [...READ_TOOLS, ...FINANCE_WRITE_TOOLS, ...CRM_WRITE_TOOLS];
+
+/**
+ * Outils proposés à un utilisateur : ceux de son rôle ; les écritures seulement si la connexion
+ * de Claude a reçu la portée crm:write.
+ */
+export function toolsFor(actor: Actor, opts: { write?: boolean } = {}): CrmTool[] {
   if (!can(actor, "assistant.use")) return [];
-  return TOOLS.filter((t) => t.anyOf.some((p) => can(actor, p)));
+  return TOOLS.filter((t) => (t.kind === "read" || opts.write) && t.anyOf.some((p) => can(actor, p)));
 }
 
-export function findTool(actor: Actor, name: string): CrmTool | null {
-  return toolsFor(actor).find((t) => t.name === name) ?? null;
+export function findTool(actor: Actor, name: string, opts: { write?: boolean } = {}): CrmTool | null {
+  return toolsFor(actor, opts).find((t) => t.name === name) ?? null;
 }
 
 export type ToolOutcome = { ok: true; text: string } | { ok: false; text: string };
 
+const UNEXPECTED = "The tool failed unexpectedly. Try again or narrow the request.";
+/** Entrée gardée au journal (au-delà, seule la liste des éléments touchés est conservée). */
+const MAX_JOURNAL_INPUT_CHARS = 8_000;
+
+function isKnownWriteError(error: unknown): boolean {
+  if (error instanceof z.ZodError || error instanceof ConflictError) return true;
+  const code = (error as { code?: string })?.code;
+  if (code === "P2002" || code === "P2025" || code === "P2003") return true;
+  return /check constraint|violates check/i.test(String((error as Error)?.message ?? ""));
+}
+
 /**
  * Exécute un outil pour un utilisateur : revalide la permission et l'entrée (une entrée
  * invalide n'exécute rien), puis sérialise le résultat en JSON borné.
+ * Écriture : exécutée « via Claude » (journal d'audit marqué), consignée comme action de
+ * Claude (`mcp.tool.<nom>`) puis les vues du CRM sont rafraîchies.
  */
-export async function runTool(actor: Actor, name: string, rawInput: unknown): Promise<ToolOutcome> {
-  const t = findTool(actor, name);
+export async function runTool(actor: Actor, name: string, rawInput: unknown, opts: { write?: boolean; tokenId?: string } = {}): Promise<ToolOutcome> {
+  const t = findTool(actor, name, opts);
   if (!t) return { ok: false, text: `Unknown tool or not allowed for your role: ${name}` };
   const parsed = t.input.safeParse(rawInput ?? {});
   if (!parsed.success) {
     return { ok: false, text: JSON.stringify({ INVALID_INPUT: z.flattenError(parsed.error), received: rawInput ?? null }) };
   }
   try {
-    const result = await t.run(actor, parsed.data as never);
+    if (t.kind === "read") return { ok: true, text: serializeResult(await t.run(actor, parsed.data as never)) };
+    const result = await withAuditSource({ via: "MCP", mcpTokenId: opts.tokenId ?? null }, async () => {
+      const out = await t.run(actor, parsed.data as never);
+      if (isWriteResult(out) && out.done !== "nothing" && out.records.length) {
+        const input = JSON.stringify(parsed.data);
+        await recordAudit(prisma, {
+          actorId: actor.id,
+          action: `mcp.tool.${t.name}`,
+          entityType: out.records[0].type,
+          entityId: out.records[0].id,
+          after: {
+            done: out.done,
+            records: out.records.map((r) => ({ type: r.type, id: r.id, reference: r.reference, label: r.label, url: r.url })),
+            ...(out.failed ? { failed: out.failed } : {}),
+            input: input.length <= MAX_JOURNAL_INPUT_CHARS ? parsed.data : null,
+          },
+        });
+        revalidateAppQuietly();
+      }
+      return out;
+    });
     return { ok: true, text: serializeResult(result) };
   } catch (error) {
-    if (error instanceof ForbiddenError) return { ok: false, text: "Access denied: your role cannot see this information." };
+    if (error instanceof ToolError) return { ok: false, text: error.message };
+    if (error instanceof ForbiddenError) {
+      return { ok: false, text: t.kind === "write" ? "Access denied: your role cannot make this change." : "Access denied: your role cannot see this information." };
+    }
     if (error instanceof NotFoundError) return { ok: false, text: "Not found (check the id with a search tool)." };
     if (error instanceof DomainError) return { ok: false, text: error.message };
+    if (isKnownWriteError(error)) {
+      const mapped = toActionError(error);
+      return { ok: false, text: JSON.stringify({ problem: mapped.error, ...(mapped.fieldErrors ? { fields: mapped.fieldErrors } : {}) }) };
+    }
     console.error(`[assistant] outil ${name} en erreur`, error);
-    return { ok: false, text: "The tool failed unexpectedly. Try again or narrow the request." };
+    return { ok: false, text: UNEXPECTED };
   }
 }
 
@@ -561,5 +721,6 @@ export function serializeResult(result: unknown): string {
   return `${text.slice(0, MAX_TOOL_RESULT_CHARS)}… [truncated: narrow the filters to see more]`;
 }
 
-/** Pour les tests : toutes les définitions, sans filtrage. */
+/** Pour les tests et l'affichage : toutes les définitions, sans filtrage. */
 export const ALL_TOOL_NAMES = TOOLS.map((t) => t.name);
+export const TOOL_LABELS: Record<string, string> = Object.fromEntries(TOOLS.map((t) => [t.name, t.label]));

@@ -10,3 +10,15 @@ import { revalidatePath } from "next/cache";
 export function revalidateApp(): void {
   revalidatePath("/", "layout");
 }
+
+/**
+ * Pour les écritures hors Server Action (Claude via MCP, dépôt par lien) : l'écriture est déjà
+ * faite, un échec d'invalidation (hors contexte de requête Next, ex. tests) ne doit pas l'annuler.
+ */
+export function revalidateAppQuietly(): void {
+  try {
+    revalidateApp();
+  } catch {
+    // Hors requête Next : rien à invalider.
+  }
+}

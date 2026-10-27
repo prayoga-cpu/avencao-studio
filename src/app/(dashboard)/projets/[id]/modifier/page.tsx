@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/app/page-header";
 import { ProjectForm } from "@/features/production/project-form";
-import { toDateOnlyString } from "@/lib/dates";
 import { requirePagePermission } from "@/server/auth/session";
 import { prisma } from "@/server/db";
+import { projectFormDefaults } from "@/server/queries/form-defaults";
 import { ACTIVE_VIDEO_STATUSES } from "@/server/domain/video-workflow";
 import { clientOptions, staffOptions } from "@/server/queries/options";
 import { getT } from "@/lib/i18n/server";
@@ -25,7 +25,6 @@ export default async function EditProjectPage(props: PageProps<"/projets/[id]/mo
     prisma.video.count({ where: { projectId: id, status: { in: ACTIVE_VIDEO_STATUSES } } }),
   ]);
   if (!p) notFound();
-  const d = (v: Date | null) => (v ? toDateOnlyString(v) : "");
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader title={tr("Modifier — {0}", [p.reference])} subtitle={tr("Un changement de deadline client est consigné (ancienne et nouvelle date).")} />
@@ -35,12 +34,7 @@ export default async function EditProjectPage(props: PageProps<"/projets/[id]/mo
         owners={owners}
         templates={[]}
         activeVideos={activeVideos}
-        defaults={{
-          clientId: p.clientId, title: p.title, description: p.description ?? "", ownerId: p.ownerId ?? "", startOn: d(p.startOn), clientDeadline: d(p.clientDeadline),
-          status: p.status, priority: p.priority, driveUrl: p.driveUrl ?? "", otherLinks: p.otherLinks ?? "",
-          includedRevisionRounds: p.includedRevisionRounds?.toString() ?? "", revisionRoundDefinition: p.revisionRoundDefinition ?? "",
-          productionErrorPolicy: p.productionErrorPolicy ?? "", templateId: "", videoCount: "", version: p.version,
-        }}
+        defaults={projectFormDefaults(p)}
       />
     </div>
   );

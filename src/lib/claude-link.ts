@@ -9,7 +9,7 @@ import type { T } from "@/lib/i18n/translate";
 export const MAX_CLAUDE_QUESTION = 1500;
 
 export function buildClaudePrompt(tr: T, question: string, pageUrl?: string | null): string {
-  const lines = [tr("Utilise le connecteur « Avencao CRM » (lecture seule) pour répondre.")];
+  const lines = [tr("Utilise le connecteur « Avencao CRM » pour répondre.")];
   if (pageUrl) lines.push(tr("Page ouverte dans le CRM : {0}", [pageUrl]));
   lines.push("", question.trim().slice(0, MAX_CLAUDE_QUESTION));
   return lines.join("\n");

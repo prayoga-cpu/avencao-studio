@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { cancelDraftInvoiceAction, reverseAllocationAction } from "@/features/finance/actions";
 import { AllocatePaymentDialog, CreditNoteDialog, IssueInvoiceDialog, RefundDialog } from "@/features/finance/finance-dialogs";
 import { AttachmentsPanel } from "@/features/shared/attachments-panel";
-import { formatDateOnly } from "@/lib/dates";
+import { formatDateOnly, toDateOnlyString } from "@/lib/dates";
 import { INVOICE_KIND_LABELS, INVOICE_PAYMENT_STATE, PAYMENT_METHOD_LABELS } from "@/lib/labels";
 import { dec, sum, type CurrencyCode } from "@/lib/money";
 import { requirePagePermission } from "@/server/auth/session";
@@ -53,7 +53,7 @@ export default async function InvoicePage(props: PageProps<"/finances/factures/[
             {inv.status === "DRAFT" && canWrite ? (
               <>
                 <Button asChild size="sm" variant="outline"><Link href={`/finances/factures/${inv.id}/modifier`}><Pencil aria-hidden /> {" "}{tr("Modifier")}</Link></Button>
-                <IssueInvoiceDialog invoiceId={inv.id} today={today} number={inv.number ?? ""} />
+                <IssueInvoiceDialog invoiceId={inv.id} today={today} number={inv.number ?? ""} issueDate={inv.issueDate ? toDateOnlyString(inv.issueDate) : ""} dueDate={inv.dueDate ? toDateOnlyString(inv.dueDate) : ""} />
                 <ConfirmAction trigger={<Button size="sm" variant="ghost">{tr("Annuler le brouillon")}</Button>} title={tr("Annuler ce brouillon ?")} reason="optional" destructive confirmLabel={tr("Annuler")} action={cancelDraftInvoiceAction.bind(null, inv.id)} />
               </>
             ) : null}

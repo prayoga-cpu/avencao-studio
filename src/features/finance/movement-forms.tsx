@@ -270,6 +270,7 @@ export function DirectCostForm({
             </NativeSelect>
           </Field>
           <Field label={tr("TVA non récupérable incluse")} htmlFor="nonRecoverableVat" error={err("nonRecoverableVat")} hint={tr("Ajoutée au coût si le réglage l'autorise.")}><Input inputMode="decimal" {...register("nonRecoverableVat")} /></Field>
+          <Field label={tr("N° de pièce fournisseur")} htmlFor="documentRef" error={err("documentRef")} hint={tr("Numéro de la facture reçue : évite de l'enregistrer deux fois.")}><Input {...register("documentRef")} /></Field>
           <Field label={tr("Notes")} htmlFor="notes" className="md:col-span-2"><Input {...register("notes")} /></Field>
         </FormGrid>
       </FormSection>
@@ -303,6 +304,7 @@ export function ExpenseForm({ defaults, categories }: { defaults: ExpenseInput; 
           </Field>
           <Field label={tr("Libellé")} htmlFor="label" required error={err("label")}><Input {...register("label")} /></Field>
           <Field label={tr("Fournisseur")} htmlFor="supplier"><Input {...register("supplier")} /></Field>
+          <Field label={tr("N° de pièce fournisseur")} htmlFor="documentRef" error={err("documentRef")} hint={tr("Numéro de la facture reçue : évite de l'enregistrer deux fois.")}><Input {...register("documentRef")} /></Field>
           <Field label={tr("Date de dépense")} htmlFor="expenseDate" required error={err("expenseDate")}><Input type="date" {...register("expenseDate")} /></Field>
           <Field label={tr("Période de rattachement")} htmlFor="periodMonth" required error={err("periodMonth")} hint={tr("Mois auquel la charge est rattachée dans le résultat.")}><Input type="month" {...register("periodMonth")} /></Field>
           <Field label={tr("Récurrence")} htmlFor="recurrence"><NativeSelect {...register("recurrence")}>{Object.entries(RECURRENCE_LABELS).map(([v, l]) => <option key={v} value={v}>{tr(l)}</option>)}</NativeSelect></Field>

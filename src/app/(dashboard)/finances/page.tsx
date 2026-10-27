@@ -288,7 +288,7 @@ export default async function FinancesPage(props: PageProps<"/finances">) {
           rowHref={(r) => `/finances/couts/${r.id}`}
           empty={<EmptyState title={tr("Aucun coût")} />}
           columns={[
-            { key: "l", header: tr("Coût"), cell: (r) => <>{tr(r.label)}<span className="block text-xs text-faint">{tr(COST_KIND_LABELS[r.kind])}</span></> },
+            { key: "l", header: tr("Coût"), cell: (r) => <>{tr(r.label)}<span className="block text-xs text-faint">{tr(COST_KIND_LABELS[r.kind])}{r.documentRef ? ` · ${tr("N° {0}", [r.documentRef])}` : ""}</span>{r.attachmentId ? <a className="block text-xs text-brand hover:underline" href={`/api/files/${r.attachmentId}`}>{tr("Pièce jointe")}</a> : null}</> },
             { key: "w", header: tr("Prestataire / fournisseur"), cell: (r) => r.editor?.displayName ?? r.supplierName ?? "—" },
             { key: "v", header: tr("Rattachement"), cell: (r) => r.video?.reference ?? r.project?.reference ?? (r.kind === "ENVELOPE" ? tr("Enveloppe {0}", [r.periodStart?.slice(0, 7) ?? ""]) : "—"), hideOnCard: true },
             { key: "s", header: tr("Étape"), cell: (r) => <StatusBadge {...COST_STAGE[r.stage]} /> },
@@ -363,7 +363,7 @@ export default async function FinancesPage(props: PageProps<"/finances">) {
           rowKey={(r) => r.id}
           empty={<EmptyState title={tr("Aucune charge")} description={tr("Abonnements, stockage, musique, publicité, frais bancaires…")} />}
           columns={[
-            { key: "l", header: tr("Charge"), cell: (r) => <>{tr(r.label)}<span className="block text-xs text-faint">{r.category} · {tr(RECURRENCE_LABELS[r.recurrence])}</span></> },
+            { key: "l", header: tr("Charge"), cell: (r) => <>{tr(r.label)}<span className="block text-xs text-faint">{r.category} · {tr(RECURRENCE_LABELS[r.recurrence])}{r.documentRef ? ` · ${tr("N° {0}", [r.documentRef])}` : ""}</span>{r.attachmentId ? <a className="block text-xs text-brand hover:underline" href={`/api/files/${r.attachmentId}`}>{tr("Pièce jointe")}</a> : null}</> },
             { key: "p", header: tr("Rattachement"), cell: (r) => r.periodMonth },
             { key: "d", header: tr("Date"), cell: (r) => formatDateOnly(r.expenseDate), hideOnCard: true },
             { key: "a", header: tr("HT"), numeric: true, cell: (r) => <Money value={r.amountNet} currency={r.currency as CurrencyCode} /> },

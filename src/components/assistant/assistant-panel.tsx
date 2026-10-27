@@ -171,7 +171,7 @@ export function AssistantPanel({ connected, finance }: { connected: boolean; fin
         <Sparkles className="size-4 text-brand" aria-hidden />
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-bold">{tr("Demander à Claude")}</h2>
-          <p className="truncate text-[0.7rem] text-subtle">{tr("Avec votre compte Claude · lecture seule, selon vos droits")}</p>
+          <p className="truncate text-[0.7rem] text-subtle">{tr("Avec votre compte Claude, selon vos droits")}</p>
         </div>
         <Button size="icon" variant="ghost" className="size-7" onClick={() => change("minimized")} aria-label={tr("Réduire")} title={tr("Réduire")}>
           <Minus aria-hidden />

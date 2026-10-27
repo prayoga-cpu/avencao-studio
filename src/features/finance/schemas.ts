@@ -175,6 +175,8 @@ export const directCostSchema = z.object({
   periodMonth: z.string().trim().refine((v) => v === "" || /^\d{4}-\d{2}$/.test(v), "Mois « AAAA-MM »"),
   nonRecoverableVat: zMoney,
   notes: zText(500),
+  /** Numéro de la facture du fournisseur ou du monteur (détection des doublons). */
+  documentRef: zText(120).default(""),
 });
 export type DirectCostInput = z.input<typeof directCostSchema>;
 
@@ -205,6 +207,8 @@ export const expenseSchema = z.object({
   isPaid: z.boolean(),
   paidOn: zDate,
   notes: zText(500),
+  /** Numéro de la facture ou du reçu du fournisseur (détection des doublons). */
+  documentRef: zText(120).default(""),
 });
 export type ExpenseInput = z.input<typeof expenseSchema>;
 

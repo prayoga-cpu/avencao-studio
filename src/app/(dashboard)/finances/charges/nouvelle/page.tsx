@@ -20,7 +20,7 @@ export default async function NewExpensePage() {
       <PageHeader title={tr("Nouvelle charge de structure")} subtitle={tr("Une dépense de production se saisit comme coût direct, jamais ici.")} />
       <ExpenseForm
         categories={categories.map((c) => ({ value: c.id, label: c.name }))}
-        defaults={{ categoryId: "", label: "", supplier: "", expenseDate: today, periodMonth: today.slice(0, 7), amountNet: "", vatAmount: "", vatRecoverable: true, currency: "EUR", manualFxRate: "", recurrence: "NONE", isPaid: true, paidOn: today, notes: "" }}
+        defaults={{ categoryId: "", label: "", supplier: "", expenseDate: today, periodMonth: today.slice(0, 7), amountNet: "", vatAmount: "", vatRecoverable: true, currency: "EUR", manualFxRate: "", recurrence: "NONE", isPaid: true, paidOn: today, notes: "", documentRef: "" }}
       />
     </div>
   );

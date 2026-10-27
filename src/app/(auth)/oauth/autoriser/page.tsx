@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import { Check, Eye, ShieldCheck } from "lucide-react";
+import { Check, Eye, PenLine, ShieldCheck } from "lucide-react";
 import { AuthCard } from "../../auth-card";
 import { Notice } from "@/components/app/notice";
 import { Button } from "@/components/ui/button";
@@ -20,8 +20,9 @@ export async function generateMetadata(): Promise<Metadata> {
 const KEYS = ["client_id", "redirect_uri", "response_type", "code_challenge", "code_challenge_method", "state", "scope", "resource"] as const;
 
 /**
- * Écran d'accord OAuth : une application Claude demande un accès en lecture au CRM au nom de
- * l'utilisateur connecté. Rien n'est délivré sans clic explicite sur « Autoriser ».
+ * Écran d'accord OAuth : une application Claude demande l'accès au CRM au nom de l'utilisateur
+ * connecté. Lecture par défaut ; l'écriture (crm:write) n'est accordée que si la case est cochée.
+ * Rien n'est délivré sans clic explicite sur « Autoriser ».
  */
 export default async function AuthorizePage(props: PageProps<"/oauth/autoriser">) {
   await connection();
@@ -59,18 +60,31 @@ export default async function AuthorizePage(props: PageProps<"/oauth/autoriser">
         </div>
         {allowed ? (
           <ul className="flex flex-col gap-2">
-            <li className="flex gap-2"><Eye className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden />{tr("Lecture seule : clients, prospection, projets, vidéos, monteurs et planning.")}</li>
+            <li className="flex gap-2"><Eye className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden />{tr("Lecture : clients, prospection, projets, vidéos, monteurs et planning.")}</li>
             <li className="flex gap-2"><Check className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden />{finance ? tr("Finances : factures, créances et rapports selon vos droits.") : tr("Aucune donnée financière : votre rôle n'y a pas accès.")}</li>
-            <li className="flex gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden />{tr("Claude ne peut rien modifier. Révocable à tout moment dans « Claude & MCP ».")}</li>
+            <li className="flex gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden />{tr("Révocable à tout moment dans « Claude & MCP ».")}</li>
           </ul>
         ) : (
           <Notice tone="warning">{tr("Votre rôle ne permet pas de connecter Claude au CRM.")}</Notice>
         )}
         <p className="text-xs text-faint">{tr("Retour vers : {0}", [host])}</p>
-        <form action={decideAuthorization} className="flex gap-2">
+        <form action={decideAuthorization} className="flex flex-col gap-4">
           {hidden}
-          <Button type="submit" name="decision" value="deny" variant="outline" className="flex-1">{tr("Refuser")}</Button>
-          {allowed ? <Button type="submit" name="decision" value="approve" className="flex-1">{tr("Autoriser")}</Button> : null}
+          {allowed ? (
+            <label className="flex gap-3 rounded-lg border border-border p-3">
+              <input type="checkbox" name="write" value="1" defaultChecked={check.requestsWrite} className="mt-1 accent-[var(--av-accent)]" />
+              <span>
+                <span className="flex items-center gap-2 font-semibold"><PenLine className="size-4 text-brand" aria-hidden />{tr("Autoriser aussi la création et la modification")}</span>
+                <span className="mt-1 block text-xs text-subtle">
+                  {tr("Claude pourra enregistrer factures, encaissements, coûts, charges, clients, projets et vidéos à partir de vos documents ou de vos messages, avec vos droits. Chaque écriture vous est soumise dans Claude ; les factures restent en brouillon, les coûts ne sont jamais validés et rien n'est supprimé.")}
+                </span>
+              </span>
+            </label>
+          ) : null}
+          <div className="flex gap-2">
+            <Button type="submit" name="decision" value="deny" variant="outline" className="flex-1">{tr("Refuser")}</Button>
+            {allowed ? <Button type="submit" name="decision" value="approve" className="flex-1">{tr("Autoriser")}</Button> : null}
+          </div>
         </form>
       </div>
     </AuthCard>

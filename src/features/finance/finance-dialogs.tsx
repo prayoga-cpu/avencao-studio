@@ -83,14 +83,15 @@ function FormDialog<T extends Record<string, string>>({
 
 const METHOD_OPTIONS = Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => ({ value, label }));
 
-export function IssueInvoiceDialog({ invoiceId, today, number }: { invoiceId: string; today: string; number: string }) {
+/** Numéro et dates déjà connus du brouillon (ex. lus par Claude sur le PDF) : repris tels quels. */
+export function IssueInvoiceDialog({ invoiceId, today, number, issueDate = "", dueDate = "" }: { invoiceId: string; today: string; number: string; issueDate?: string; dueDate?: string }) {
   const tr = useT();
   return (
     <FormDialog
       trigger={<Button size="sm">{tr("Marquer émise")}</Button>}
       title={tr("Facture émise")}
       description={tr("Renseignez le numéro et la date du document émis dans votre outil de facturation. Le taux de change est figé à la date d'émission.")}
-      initial={{ invoiceId, number, issueDate: today, dueDate: "", manualFxRate: "" }}
+      initial={{ invoiceId, number, issueDate: issueDate || today, dueDate, manualFxRate: "" }}
       fields={[
         { name: "number", label: tr("Numéro"), required: true },
         { name: "issueDate", label: tr("Date d'émission"), type: "date", required: true },

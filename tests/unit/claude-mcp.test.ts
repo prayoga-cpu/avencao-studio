@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { safeNextPath } from "@/lib/safe-redirect";
 import { buildClaudePrompt, claudeNewChatUrl } from "@/lib/claude-link";
 import { makeT } from "@/lib/i18n/translate";
-import { isAllowedRedirectUri, pkceChallenge, redirectUriMatches, verifyPkce } from "@/server/mcp/oauth";
+import { v } from "@/server/ai/tool-kit";
+import { hasWriteScope, isAllowedRedirectUri, pkceChallenge, redirectUriMatches, scopeFor, verifyPkce } from "@/server/mcp/oauth";
 
 describe("adresses de retour OAuth", () => {
   it("accepte Claude (claude.ai, claude.com) et les adresses locales, refuse le reste", () => {
@@ -58,9 +59,9 @@ describe("retour après connexion (?suite=)", () => {
 describe("bouton « Demander à Claude » (sans API côté CRM)", () => {
   it("construit la question pour le connecteur, avec la page ouverte en option, en FR et en EN", () => {
     const fr = buildClaudePrompt(makeT("fr"), "  Qu'est-ce qui est en retard ?  ", "https://www.avencao.io/videos/abc");
-    expect(fr).toBe("Utilise le connecteur « Avencao CRM » (lecture seule) pour répondre.\nPage ouverte dans le CRM : https://www.avencao.io/videos/abc\n\nQu'est-ce qui est en retard ?");
+    expect(fr).toBe("Utilise le connecteur « Avencao CRM » pour répondre.\nPage ouverte dans le CRM : https://www.avencao.io/videos/abc\n\nQu'est-ce qui est en retard ?");
     const en = buildClaudePrompt(makeT("en"), "What is overdue?", null);
-    expect(en).toBe("Use the “Avencao CRM” connector (read-only) to answer.\n\nWhat is overdue?");
+    expect(en).toBe("Use the “Avencao CRM” connector to answer.\n\nWhat is overdue?");
     expect(buildClaudePrompt(makeT("fr"), "x".repeat(5000)).length).toBeLessThan(1600);
   });
 
@@ -68,5 +69,23 @@ describe("bouton « Demander à Claude » (sans API côté CRM)", () => {
     const url = new URL(claudeNewChatUrl("Bonjour & merci ?\nLigne 2"));
     expect(url.origin + url.pathname).toBe("https://claude.ai/new");
     expect(url.searchParams.get("q")).toBe("Bonjour & merci ?\nLigne 2");
+  });
+});
+
+describe("portées et entrées des outils d'écriture", () => {
+  it("l'écriture n'est accordée que par la portée crm:write explicite", () => {
+    expect(scopeFor(false)).toBe("crm:read");
+    expect(scopeFor(true)).toBe("crm:read crm:write");
+    expect(hasWriteScope("crm:read crm:write")).toBe(true);
+    expect(hasWriteScope("crm:read")).toBe(false);
+    expect(hasWriteScope("crm:writer")).toBe(false);
+    expect(hasWriteScope(null)).toBe(false);
+  });
+
+  it("valeurs facultatives transmises aux services : chaîne vide si absente, texte sinon", () => {
+    expect(v(undefined)).toBe("");
+    expect(v(null)).toBe("");
+    expect(v(450)).toBe("450");
+    expect(v(" 1 250,50 ")).toBe("1 250,50");
   });
 });

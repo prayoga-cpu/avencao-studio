@@ -1,10 +1,11 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { buildMcpServer } from "@/server/mcp/server";
-import { authenticateBearer, protectedResourceMetadataUrl } from "@/server/mcp/oauth";
+import { MCP_SCOPES, authenticateBearer, protectedResourceMetadataUrl } from "@/server/mcp/oauth";
 
 /**
  * Serveur MCP du CRM (transport « Streamable HTTP », sans état : un serveur par requête).
- * Authentification : jeton OAuth délivré à une application Claude ou jeton personnel.
+ * Authentification : jeton OAuth délivré à une application Claude ou jeton personnel ; les outils
+ * d'écriture ne sont proposés qu'avec la portée crm:write accordée par l'utilisateur.
  * Sans jeton valide : 401 + adresse des métadonnées OAuth (découverte automatique par Claude).
  */
 export const maxDuration = 60;
@@ -23,7 +24,7 @@ function withCors(response: Response): Response {
 }
 
 function unauthorized(hadToken: boolean): Response {
-  const params = [`resource_metadata="${protectedResourceMetadataUrl()}"`, `scope="crm:read"`];
+  const params = [`resource_metadata="${protectedResourceMetadataUrl()}"`, `scope="${MCP_SCOPES.join(" ")}"`];
   if (hadToken) params.unshift(`error="invalid_token"`, `error_description="Token missing, expired or revoked"`);
   return withCors(
     Response.json(
@@ -41,7 +42,7 @@ async function handle(request: Request): Promise<Response> {
   if (request.method !== "POST") {
     return withCors(Response.json({ jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed." }, id: null }, { status: 405, headers: { Allow: "POST" } }));
   }
-  const server = buildMcpServer(auth.actor);
+  const server = buildMcpServer(auth);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   try {
     await server.connect(transport);

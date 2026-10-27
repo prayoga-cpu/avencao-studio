@@ -10,10 +10,11 @@ import { StatusBadge } from "@/components/app/status-badge";
 import { convertOpportunityAction } from "@/features/prospection/actions";
 import { OpportunityForm } from "@/features/prospection/opportunity-form";
 import { ActivityForm } from "@/features/prospection/activity-form";
-import { formatDateTime, toDateOnlyString } from "@/lib/dates";
+import { formatDateTime } from "@/lib/dates";
 import { ACTIVITY_TYPE_LABELS, OPPORTUNITY_STAGE } from "@/lib/labels";
 import { requirePagePermission } from "@/server/auth/session";
 import { prisma } from "@/server/db";
+import { opportunityFormDefaults } from "@/server/queries/form-defaults";
 import { can } from "@/server/policies";
 import { staffOptions } from "@/server/queries/options";
 import { agencyToday } from "@/server/services/common";
@@ -40,7 +41,6 @@ export default async function OpportunityPage(props: PageProps<"/prospection/[id
     agencyToday(),
   ]);
   if (!o) notFound();
-  const d = (x: Date | null) => (x ? toDateOnlyString(x) : "");
   return (
     <>
       <PageHeader
@@ -65,12 +65,7 @@ export default async function OpportunityPage(props: PageProps<"/prospection/[id
               id={o.id}
               clients={clients.map((c) => ({ value: c.id, label: c.displayName }))}
               owners={owners}
-              defaults={{
-                clientId: o.clientId, title: o.title, stage: o.stage, services: o.services, servicesNote: o.servicesNote ?? "",
-                estimatedAmount: o.estimatedAmount?.toFixed(2) ?? "", currency: o.currency, probability: o.probability?.toFixed() ?? "",
-                expectedCloseOn: d(o.expectedCloseOn), nextAction: o.nextAction ?? "", followUpOn: d(o.followUpOn), lostReason: o.lostReason ?? "",
-                ownerId: o.ownerId ?? "", version: o.version,
-              }}
+              defaults={opportunityFormDefaults(o)}
             />
           ) : (
             <p className="text-sm text-subtle">{tr("Lecture seule.")}</p>

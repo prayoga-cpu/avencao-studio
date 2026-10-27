@@ -15,7 +15,10 @@ function paramsFrom(formData: FormData): AuthorizeParams {
   return out;
 }
 
-/** Accord de l'utilisateur : la demande est revalidée côté serveur avant de délivrer un code. */
+/**
+ * Accord de l'utilisateur : la demande est revalidée côté serveur avant de délivrer un code ;
+ * l'écriture n'est accordée que si la case « création et modification » est cochée.
+ */
 export async function decideAuthorization(formData: FormData) {
   const params = paramsFrom(formData);
   const check = await checkAuthorizeRequest(params);
@@ -28,6 +31,6 @@ export async function decideAuthorization(formData: FormData) {
   }
   const actor = await getActor();
   if (!actor) redirect(`/connexion?suite=${encodeURIComponent(`/oauth/autoriser?${new URLSearchParams(params as Record<string, string>).toString()}`)}`);
-  const target = await approveAuthorization(actor, check);
+  const target = await approveAuthorization(actor, check, { write: formData.get("write") === "1" });
   redirect(target);
 }

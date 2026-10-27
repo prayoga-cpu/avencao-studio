@@ -31,7 +31,7 @@ export default async function NewCostPage(props: PageProps<"/finances/couts/nouv
         editors={editors}
         projects={projects.map((p) => ({ value: p.value, label: tr(p.label) }))}
         videos={videos.map((v) => ({ value: v.id, label: `${v.reference} — ${v.title}`, projectId: v.projectId }))}
-        defaults={{ kind: "PURCHASE", label: "", editorId: "", supplierName: "", projectId: video?.projectId ?? "", videoId, amount: "", currency: "EUR", manualFxRate: "", incurredOn: today, stage: "COMMITTED", periodMonth: today.slice(0, 7), nonRecoverableVat: "", notes: "" }}
+        defaults={{ kind: "PURCHASE", label: "", editorId: "", supplierName: "", projectId: video?.projectId ?? "", videoId, amount: "", currency: "EUR", manualFxRate: "", incurredOn: today, stage: "COMMITTED", periodMonth: today.slice(0, 7), nonRecoverableVat: "", notes: "", documentRef: "" }}
       />
     </div>
   );

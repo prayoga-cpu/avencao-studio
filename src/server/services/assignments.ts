@@ -651,8 +651,11 @@ export async function repriceMinuteCostsForVideo(tx: Db, actor: Actor, videoId: 
   }
 }
 
-/** Saisie du montant d'un coût « À renseigner » ou correction d'un coût non payé (avec trace). */
-export async function setCostAmount(actor: Actor, input: { costId: string; amount: string; manualFxRate: string; reason: string }) {
+/**
+ * Saisie du montant d'un coût « À renseigner » ou correction d'un coût non payé (avec trace).
+ * `documentRef` : numéro de la facture du prestataire, si connu (détection des doublons).
+ */
+export async function setCostAmount(actor: Actor, input: { costId: string; amount: string; manualFxRate: string; reason: string; documentRef?: string }) {
   assertCan(actor, "costs.write");
   const cost = await prisma.directCost.findUnique({ where: { id: input.costId }, include: { paymentAllocations: { where: { reversedAt: null } } } });
   if (!cost) throw new NotFoundError();
@@ -676,6 +679,7 @@ export async function setCostAmount(actor: Actor, input: { costId: string; amoun
         ...(fx ? fxData(fx) : { fxUnitsPerEur: null, fxRateDate: null, fxSource: null }),
         stage: rounded && cost.stage === "ESTIMATED" ? "COMMITTED" : cost.stage,
         committedAt: rounded && !cost.committedAt ? new Date() : cost.committedAt,
+        ...(input.documentRef !== undefined ? { documentRef: str(input.documentRef) } : {}),
         version: { increment: 1 },
       },
     });

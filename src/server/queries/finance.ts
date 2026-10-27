@@ -176,6 +176,7 @@ export async function listDirectCosts(actor: Actor, f: { stage?: string; kind?: 
     const allocated = sum(c.allocations.map((a) => dec(a.amount)));
     return {
       id: c.id, kind: c.kind, stage: c.stage, label: c.label, editor: c.editor, supplierName: c.supplierName, video: c.video, project: c.project,
+      documentRef: c.documentRef, attachmentId: c.attachmentId,
       amount: c.amount?.toFixed(2) ?? null, currency: c.currency, amountEur: c.amountEur?.toFixed(2) ?? null, fxSource: c.fxSource,
       incurredOn: d(c.incurredOn), paid: p.toFixed(2), remaining: c.amount ? dec(c.amount).minus(p).toFixed(2) : null,
       allocated: allocated.toFixed(2), unallocated: c.amount && (c.kind === "ENVELOPE" || (!c.videoId && c.allocations.length)) ? dec(c.amount).minus(allocated).toFixed(2) : null,
@@ -255,6 +256,7 @@ export async function listExpenses(actor: Actor, f: { from?: string; to?: string
     id: e.id, label: e.label, supplier: e.supplier, category: e.category.name, expenseDate: d(e.expenseDate), periodMonth: d(e.periodMonth)!.slice(0, 7),
     amountNet: e.amountNet.toFixed(2), vatAmount: e.vatAmount.toFixed(2), vatRecoverable: e.vatRecoverable, currency: e.currency, costEur: e.costEur.toFixed(2),
     recurrence: e.recurrence, isPaid: e.isPaid, paidOn: d(e.paidOn), status: e.status, voidReason: e.voidReason, attachmentId: e.attachmentId, fxSource: e.fxSource,
+    documentRef: e.documentRef,
   }));
 }
 

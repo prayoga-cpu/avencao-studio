@@ -91,7 +91,8 @@ const PRODUCTION: Permission[] = [
   "planning.view",
   "notes.internal",
   "time.log",
-  // Assistant IA et connexion de Claude (MCP) : lecture seule, mêmes droits que l'écran.
+  // Assistant IA et connexion de Claude (MCP) : mêmes droits que l'écran ; écriture seulement
+  // si l'utilisateur accorde la portée crm:write à sa connexion.
   "assistant.use",
 ];
 

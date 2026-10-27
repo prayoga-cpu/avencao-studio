@@ -61,6 +61,7 @@ export async function createDirectCost(actor: Actor, input: DirectCostInput): Pr
         amountEur: totalCost && fx ? convert(totalCost, fx).toFixed(2) : null,
         ...(fx ? fxData(fx) : {}),
         nonRecoverableVat: nonRecoverable.toFixed(2),
+        documentRef: str(d.documentRef),
         incurredOn: parseDateOnly(d.incurredOn),
         periodStart: d.periodMonth ? parseDateOnly(`${d.periodMonth}-01`) : null,
         periodEnd: d.periodMonth ? parseDateOnly(endOfMonth(`${d.periodMonth}-01`)) : null,
@@ -182,6 +183,7 @@ export async function createExpense(actor: Actor, input: ExpenseInput): Promise<
       isPaid: d.isPaid,
       paidOn: d.isPaid ? dateOrNull(d.paidOn) : null,
       notes: str(d.notes),
+      documentRef: str(d.documentRef),
       createdById: actor.id,
     },
   });

@@ -9,7 +9,8 @@ import "server-only";
  * - jeton d'accès 1 h, jeton de rafraîchissement 30 jours à rotation (réutilisation d'un ancien
  *   jeton = révocation de toute l'autorisation) ;
  * - jetons personnels (Claude Code, scripts) créés et révoqués par l'utilisateur.
- * Seules les empreintes SHA-256 des secrets sont stockées. Lecture seule (portée crm:read).
+ * Seules les empreintes SHA-256 des secrets sont stockées. Portées : crm:read (lecture) et,
+ * sur accord explicite de l'utilisateur, crm:write (création et modification via Claude).
  */
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { publicAppUrl, trustedOrigins } from "../app-url";
@@ -20,6 +21,8 @@ import { DomainError, NotFoundError } from "../errors";
 import { can, type Actor } from "../policies";
 
 export const MCP_SCOPE = "crm:read";
+export const MCP_WRITE_SCOPE = "crm:write";
+export const MCP_SCOPES = [MCP_SCOPE, MCP_WRITE_SCOPE] as const;
 export const ACCESS_TOKEN_TTL_S = 60 * 60;
 export const REFRESH_TOKEN_TTL_S = 30 * 24 * 60 * 60;
 export const AUTH_CODE_TTL_S = 5 * 60;
@@ -32,6 +35,10 @@ type Env = Record<string, string | undefined>;
 export const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 const randomSecret = (prefix: string) => `${prefix}_${randomBytes(32).toString("base64url")}`;
 const displayPrefix = (token: string) => token.slice(0, token.indexOf("_", 4) + 5);
+
+/** La portée (liste séparée par des espaces) autorise-t-elle l'écriture ? */
+export const hasWriteScope = (scope: string | null | undefined) => (scope ?? "").split(/\s+/).includes(MCP_WRITE_SCOPE);
+export const scopeFor = (write: boolean) => (write ? MCP_SCOPES.join(" ") : MCP_SCOPE);
 
 export function mcpResourceUrl(env: Env = process.env): string {
   return `${publicAppUrl(env)}/api/mcp`;
@@ -55,7 +62,7 @@ export function authorizationServerMetadata(env: Env = process.env) {
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"],
     revocation_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"],
-    scopes_supported: [MCP_SCOPE],
+    scopes_supported: [...MCP_SCOPES],
     authorization_response_iss_parameter_supported: true,
     service_documentation: `${base}/claude`,
   };
@@ -66,7 +73,7 @@ export function protectedResourceMetadata(env: Env = process.env) {
     resource: mcpResourceUrl(env),
     authorization_servers: [publicAppUrl(env)],
     bearer_methods_supported: ["header"],
-    scopes_supported: [MCP_SCOPE],
+    scopes_supported: [...MCP_SCOPES],
     resource_name: "Avencao CRM",
     resource_documentation: `${publicAppUrl(env)}/claude`,
   };
@@ -174,7 +181,7 @@ export async function registerClient(body: unknown) {
     grant_types: ["authorization_code", "refresh_token"],
     response_types: ["code"],
     token_endpoint_auth_method: authMethod,
-    scope: MCP_SCOPE,
+    scope: scopeFor(true),
   };
 }
 
@@ -192,7 +199,16 @@ export interface AuthorizeParams {
 }
 
 export type AuthorizeCheck =
-  | { ok: true; client: { id: string; clientId: string; name: string }; redirectUri: string; codeChallenge: string; state: string | null; resource: string | null }
+  | {
+      ok: true;
+      client: { id: string; clientId: string; name: string };
+      redirectUri: string;
+      codeChallenge: string;
+      state: string | null;
+      resource: string | null;
+      /** L'application demande aussi l'écriture (crm:write) : case cochée par défaut sur l'écran d'accord. */
+      requestsWrite: boolean;
+    }
   /** Erreur affichée à l'utilisateur (client ou adresse de retour inconnus : jamais de redirection). */
   | { ok: false; fatal: true; message: string }
   /** Erreur renvoyée à l'application (adresse de retour vérifiée). */
@@ -232,12 +248,24 @@ export async function checkAuthorizeRequest(p: AuthorizeParams): Promise<Authori
     return fail("invalid_request", "PKCE with code_challenge_method=S256 is required.");
   }
   if (p.resource && !resourceIsOurs(p.resource)) return fail("invalid_target", "Unknown resource.");
-  return { ok: true, client: { id: client.id, clientId: client.clientId, name: client.name }, redirectUri, codeChallenge: p.code_challenge, state, resource: p.resource ?? null };
+  return {
+    ok: true,
+    client: { id: client.id, clientId: client.clientId, name: client.name },
+    redirectUri,
+    codeChallenge: p.code_challenge,
+    state,
+    resource: p.resource ?? null,
+    requestsWrite: hasWriteScope(p.scope),
+  };
 }
 
-/** Après accord explicite de l'utilisateur : code à usage unique et adresse de retour. */
-export async function approveAuthorization(actor: Actor, check: Extract<AuthorizeCheck, { ok: true }>): Promise<string> {
+/**
+ * Après accord explicite de l'utilisateur : code à usage unique et adresse de retour.
+ * L'écriture (crm:write) n'est accordée que si l'utilisateur l'a cochée.
+ */
+export async function approveAuthorization(actor: Actor, check: Extract<AuthorizeCheck, { ok: true }>, opts: { write?: boolean } = {}): Promise<string> {
   if (!can(actor, "assistant.use")) throw new DomainError("Votre rôle ne permet pas de connecter Claude au CRM.");
+  const scope = scopeFor(!!opts.write);
   const code = randomSecret("avc_code");
   await prisma.mcpAuthCode.create({
     data: {
@@ -246,12 +274,12 @@ export async function approveAuthorization(actor: Actor, check: Extract<Authoriz
       userId: actor.id,
       redirectUri: check.redirectUri,
       codeChallenge: check.codeChallenge,
-      scope: MCP_SCOPE,
+      scope,
       resource: check.resource,
       expiresAt: new Date(Date.now() + AUTH_CODE_TTL_S * 1000),
     },
   });
-  await recordAudit(prisma, { actorId: actor.id, action: "mcp.authorize", entityType: "McpClient", entityId: check.client.id, after: { client: check.client.name } });
+  await recordAudit(prisma, { actorId: actor.id, action: "mcp.authorize", entityType: "McpClient", entityId: check.client.id, after: { client: check.client.name, scope } });
   const url = new URL(check.redirectUri);
   url.searchParams.set("code", code);
   if (check.state) url.searchParams.set("state", check.state);
@@ -261,17 +289,17 @@ export async function approveAuthorization(actor: Actor, check: Extract<Authoriz
 
 // ───────────────────────────── Jetons ─────────────────────────────
 
-async function issueTokenPair(userId: string, mcpClientId: string, grantId: string) {
+async function issueTokenPair(userId: string, mcpClientId: string, grantId: string, scope: string) {
   const accessToken = randomSecret("avc_at");
   const refreshToken = randomSecret("avc_rt");
   const now = Date.now();
   await prisma.mcpToken.createMany({
     data: [
-      { kind: "OAUTH_ACCESS", userId, mcpClientId, grantId, tokenHash: sha256(accessToken), prefix: displayPrefix(accessToken), expiresAt: new Date(now + ACCESS_TOKEN_TTL_S * 1000) },
-      { kind: "OAUTH_REFRESH", userId, mcpClientId, grantId, tokenHash: sha256(refreshToken), prefix: displayPrefix(refreshToken), expiresAt: new Date(now + REFRESH_TOKEN_TTL_S * 1000) },
+      { kind: "OAUTH_ACCESS", userId, mcpClientId, grantId, scope, tokenHash: sha256(accessToken), prefix: displayPrefix(accessToken), expiresAt: new Date(now + ACCESS_TOKEN_TTL_S * 1000) },
+      { kind: "OAUTH_REFRESH", userId, mcpClientId, grantId, scope, tokenHash: sha256(refreshToken), prefix: displayPrefix(refreshToken), expiresAt: new Date(now + REFRESH_TOKEN_TTL_S * 1000) },
     ],
   });
-  return { access_token: accessToken, token_type: "Bearer", expires_in: ACCESS_TOKEN_TTL_S, refresh_token: refreshToken, scope: MCP_SCOPE };
+  return { access_token: accessToken, token_type: "Bearer", expires_in: ACCESS_TOKEN_TTL_S, refresh_token: refreshToken, scope };
 }
 
 async function revokeGrantTokens(grantId: string) {
@@ -330,7 +358,7 @@ export async function exchangeToken(form: URLSearchParams, authorization: string
     if (used.count !== 1) throw new OAuthError("invalid_grant", "Authorization code already used.");
     if (!(await activeActor(record.userId))) throw new OAuthError("invalid_grant", "User access is disabled.");
     await prisma.mcpClient.update({ where: { id: client.id }, data: { lastUsedAt: new Date() } });
-    return issueTokenPair(record.userId, client.id, randomBytes(16).toString("hex"));
+    return issueTokenPair(record.userId, client.id, randomBytes(16).toString("hex"), scopeFor(hasWriteScope(record.scope)));
   }
 
   if (grantType === "refresh_token") {
@@ -355,10 +383,10 @@ export async function exchangeToken(form: URLSearchParams, authorization: string
       await revokeGrantTokens(record.grantId);
       throw new OAuthError("invalid_grant", "User access is disabled.");
     }
-    // Les anciens jetons d'accès de cette autorisation sont remplacés.
+    // Les anciens jetons d'accès de cette autorisation sont remplacés ; la portée accordée est conservée.
     await prisma.mcpToken.updateMany({ where: { grantId: record.grantId, kind: "OAUTH_ACCESS", revokedAt: null }, data: { revokedAt: new Date() } });
     await prisma.mcpClient.update({ where: { id: client.id }, data: { lastUsedAt: new Date() } });
-    return issueTokenPair(record.userId, client.id, record.grantId);
+    return issueTokenPair(record.userId, client.id, record.grantId, scopeFor(hasWriteScope(record.scope)));
   }
 
   throw new OAuthError("unsupported_grant_type", "Supported grants: authorization_code, refresh_token.");
@@ -377,6 +405,8 @@ export interface McpAuth {
   actor: Actor;
   tokenId: string;
   kind: "PERSONAL" | "OAUTH_ACCESS";
+  /** Portée crm:write accordée : outils de création et de modification proposés. */
+  write: boolean;
 }
 
 /** Authentifie un appel MCP (`Authorization: Bearer …`) : jeton valide + utilisateur actif autorisé. */
@@ -392,12 +422,12 @@ export async function authenticateBearer(header: string | null): Promise<McpAuth
     await prisma.mcpToken.update({ where: { id: record.id }, data: { lastUsedAt: new Date() } });
     if (record.mcpClientId) await prisma.mcpClient.update({ where: { id: record.mcpClientId }, data: { lastUsedAt: new Date() } });
   }
-  return { actor, tokenId: record.id, kind: record.kind };
+  return { actor, tokenId: record.id, kind: record.kind, write: hasWriteScope(record.scope) };
 }
 
 // ───────────────────────────── Gestion par l'utilisateur ─────────────────────────────
 
-export async function createPersonalToken(actor: Actor, input: { name: string; days: number }) {
+export async function createPersonalToken(actor: Actor, input: { name: string; days: number; write?: boolean }) {
   if (!can(actor, "assistant.use")) throw new DomainError("Votre rôle ne permet pas de connecter Claude au CRM.");
   const name = input.name.trim().slice(0, 80);
   if (!name) throw new DomainError("Donnez un nom au jeton (ex. « Claude Code — MacBook »).");
@@ -406,9 +436,9 @@ export async function createPersonalToken(actor: Actor, input: { name: string; d
   if (active >= 10) throw new DomainError("10 jetons actifs au maximum : révoquez un ancien jeton.");
   const token = randomSecret("avc_pat");
   const record = await prisma.mcpToken.create({
-    data: { kind: "PERSONAL", userId: actor.id, name, tokenHash: sha256(token), prefix: displayPrefix(token), expiresAt: new Date(Date.now() + input.days * 86_400_000) },
+    data: { kind: "PERSONAL", userId: actor.id, name, scope: scopeFor(!!input.write), tokenHash: sha256(token), prefix: displayPrefix(token), expiresAt: new Date(Date.now() + input.days * 86_400_000) },
   });
-  await recordAudit(prisma, { actorId: actor.id, action: "mcp.personal_token_created", entityType: "McpToken", entityId: record.id, after: { name, days: input.days } });
+  await recordAudit(prisma, { actorId: actor.id, action: "mcp.personal_token_created", entityType: "McpToken", entityId: record.id, after: { name, days: input.days, scope: record.scope } });
   return { id: record.id, token };
 }
 
@@ -417,6 +447,27 @@ export async function revokePersonalToken(actor: Actor, tokenId: string) {
   if (!record) throw new NotFoundError();
   if (!record.revokedAt) await prisma.mcpToken.update({ where: { id: record.id }, data: { revokedAt: new Date() } });
   await recordAudit(prisma, { actorId: actor.id, action: "mcp.personal_token_revoked", entityType: "McpToken", entityId: record.id });
+}
+
+/**
+ * Active ou retire l'écriture d'une application connectée (tous les jetons de l'autorisation) :
+ * effet au prochain appel de Claude, sans reconnexion.
+ */
+export async function setGrantWriteAccess(actor: Actor, grantId: string, write: boolean) {
+  const owned = await prisma.mcpToken.findFirst({ where: { grantId, userId: actor.id } });
+  if (!owned) throw new NotFoundError();
+  const scope = scopeFor(write);
+  await prisma.mcpToken.updateMany({ where: { grantId, userId: actor.id }, data: { scope } });
+  await recordAudit(prisma, { actorId: actor.id, action: "mcp.grant_scope_changed", entityType: "McpToken", entityId: grantId, after: { scope } });
+}
+
+/** Active ou retire l'écriture d'un jeton personnel encore valide. */
+export async function setPersonalTokenWriteAccess(actor: Actor, tokenId: string, write: boolean) {
+  const record = await prisma.mcpToken.findFirst({ where: { id: tokenId, userId: actor.id, kind: "PERSONAL", revokedAt: null } });
+  if (!record) throw new NotFoundError();
+  const scope = scopeFor(write);
+  await prisma.mcpToken.update({ where: { id: record.id }, data: { scope } });
+  await recordAudit(prisma, { actorId: actor.id, action: "mcp.personal_token_scope_changed", entityType: "McpToken", entityId: record.id, after: { scope } });
 }
 
 export async function revokeGrant(actor: Actor, grantId: string) {
@@ -434,21 +485,21 @@ export async function listConnections(actor: Actor) {
       where: { userId: actor.id, kind: "PERSONAL" },
       orderBy: { createdAt: "desc" },
       take: 50,
-      select: { id: true, name: true, prefix: true, createdAt: true, lastUsedAt: true, expiresAt: true, revokedAt: true },
+      select: { id: true, name: true, prefix: true, scope: true, createdAt: true, lastUsedAt: true, expiresAt: true, revokedAt: true },
     }),
     prisma.mcpToken.findMany({
       where: { userId: actor.id, kind: "OAUTH_REFRESH", revokedAt: null, expiresAt: { gt: now } },
       orderBy: { createdAt: "desc" },
-      select: { grantId: true, createdAt: true, client: { select: { name: true, lastUsedAt: true } } },
+      select: { grantId: true, scope: true, createdAt: true, client: { select: { name: true, lastUsedAt: true } } },
     }),
   ]);
-  const grants = new Map<string, { grantId: string; client: string; refreshedAt: Date; lastUsedAt: Date | null }>();
+  const grants = new Map<string, { grantId: string; client: string; write: boolean; refreshedAt: Date; lastUsedAt: Date | null }>();
   for (const t of oauth) {
     if (!t.grantId || grants.has(t.grantId)) continue;
-    grants.set(t.grantId, { grantId: t.grantId, client: t.client?.name ?? "Application", refreshedAt: t.createdAt, lastUsedAt: t.client?.lastUsedAt ?? null });
+    grants.set(t.grantId, { grantId: t.grantId, client: t.client?.name ?? "Application", write: hasWriteScope(t.scope), refreshedAt: t.createdAt, lastUsedAt: t.client?.lastUsedAt ?? null });
   }
   return {
-    personal: personal.map((t) => ({ ...t, active: !t.revokedAt && (!t.expiresAt || t.expiresAt > now) })),
+    personal: personal.map(({ scope, ...t }) => ({ ...t, write: hasWriteScope(scope), active: !t.revokedAt && (!t.expiresAt || t.expiresAt > now) })),
     grants: [...grants.values()],
   };
 }
@@ -462,12 +513,16 @@ export async function hasClaudeConnection(userId: string): Promise<boolean> {
   return !!token;
 }
 
-/** Nettoyage quotidien : codes expirés, jetons expirés ou révoqués depuis 30 jours, clients jamais utilisés. */
+/**
+ * Nettoyage quotidien : codes expirés, jetons expirés ou révoqués depuis 30 jours, clients jamais
+ * utilisés, liens de dépôt expirés (les pièces déjà déposées restent sur leur élément).
+ */
 export async function purgeMcpData(now = new Date()) {
   const monthAgo = new Date(now.getTime() - 30 * 86_400_000);
   const weekAgo = new Date(now.getTime() - 7 * 86_400_000);
   const codes = await prisma.mcpAuthCode.deleteMany({ where: { expiresAt: { lt: now } } });
   const tokens = await prisma.mcpToken.deleteMany({ where: { OR: [{ expiresAt: { lt: monthAgo } }, { revokedAt: { lt: monthAgo } }] } });
   const clients = await prisma.mcpClient.deleteMany({ where: { createdAt: { lt: weekAgo }, tokens: { none: {} }, authCodes: { none: {} } } });
-  return { codes: codes.count, tokens: tokens.count, clients: clients.count };
+  const uploads = await prisma.mcpUploadTicket.deleteMany({ where: { expiresAt: { lt: now } } });
+  return { codes: codes.count, tokens: tokens.count, clients: clients.count, uploads: uploads.count };
 }

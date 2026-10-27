@@ -44,7 +44,7 @@ serveur. Rien n'est simulé : une fonction absente est indiquée comme telle.
 
 | Fonction | État |
 |---|---|
-| Serveur MCP (claude.ai, Claude Desktop, Claude Code) | Disponible : OAuth 2.1 + jetons personnels, 14 outils en lecture seule. |
+| Serveur MCP (claude.ai, Claude Desktop, Claude Code) | Disponible : OAuth 2.1 + jetons personnels, 18 outils de lecture ; écriture sur autorisation explicite (32 outils : factures en brouillon, encaissements, coûts, charges, ventes, clients, projets, vidéos, monteurs, `create_mission`), pièce d'origine jointe par lien de dépôt. |
 | Bouton « Demander à Claude » (ouvrir / réduire / fermer) | Disponible : la question s'ouvre dans le compte Claude de l'utilisateur ; aucune clé d'API ni coût côté CRM. |
 
 ## Différé (phase 2 ou décision nécessaire)

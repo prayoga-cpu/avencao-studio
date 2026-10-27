@@ -409,6 +409,7 @@ model User {
   timeEntries   TimeEntry[]
   mcpAuthCodes  McpAuthCode[]
   mcpTokens     McpToken[]
+  mcpUploads    McpUploadTicket[]
 
   @@index([role, status])
 }
@@ -1439,6 +1440,8 @@ model DirectCost {
   cancelReason      String?
   notes             String?
   attachmentId      String?
+  /// Numéro de la pièce du fournisseur ou du monteur (facture) : détection des doublons.
+  documentRef       String?
   createdById       String?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
@@ -1453,6 +1456,7 @@ model DirectCost {
   @@index([projectId])
   @@index([assignmentId])
   @@index([incurredOn])
+  @@index([documentRef])
 }
 
 /// Répartition analytique d'un coût (enveloppe, achat projet) entre livrables.
@@ -1554,6 +1558,8 @@ model Expense {
   isPaid         Boolean         @default(false)
   paidOn         DateTime?       @db.Date
   attachmentId   String?
+  /// Numéro de la pièce du fournisseur (facture, reçu) : détection des doublons.
+  documentRef    String?
   notes          String?
   status         MovementStatus  @default(RECORDED)
   voidedAt       DateTime?
@@ -1563,6 +1569,7 @@ model Expense {
 
   @@index([periodMonth])
   @@index([paidOn])
+  @@index([documentRef])
 }
 
 // ───────────────────────────── Récurrence ─────────────────────────────
@@ -1681,10 +1688,15 @@ model AuditEvent {
   before     Json?
   after      Json?
   reason     String?
+  /// Canal de la modification : null = écrans du CRM, "MCP" = Claude (serveur MCP).
+  via        String?
+  /// Jeton MCP utilisé (modifications faites par Claude).
+  mcpTokenId String?
   createdAt  DateTime @default(now())
 
   @@index([entityType, entityId])
   @@index([createdAt])
+  @@index([via, createdAt])
 }
 
 /// Journal des exécutions de jobs (rappels, récurrence…).
@@ -1836,4 +1848,26 @@ model McpToken {
 
   @@index([userId, kind])
   @@index([grantId])
+}
+
+/// Lien de dépôt à usage unique (24 h) délivré par Claude après une création : la personne y
+/// dépose la pièce d'origine (PDF, image), rattachée à l'élément créé. Seule l'empreinte est stockée.
+model McpUploadTicket {
+  id           String          @id @default(cuid())
+  tokenHash    String          @unique
+  userId       String
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Jeton MCP de la conversation Claude qui a créé le lien (traçabilité).
+  mcpTokenId   String?
+  ownerType    AttachmentOwner
+  ownerId      String
+  /// Description de l'élément affichée sur la page de dépôt.
+  label        String
+  expiresAt    DateTime
+  usedAt       DateTime?
+  attachmentId String?
+  createdAt    DateTime        @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
 }
